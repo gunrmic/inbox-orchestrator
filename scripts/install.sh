@@ -1,20 +1,45 @@
 #!/usr/bin/env bash
 # inbox-orchestrator installer for macOS.
 # Usage: curl -fsSL https://raw.githubusercontent.com/gunrmic/inbox-orchestrator/main/scripts/install.sh | bash
+#
+# Clones the repo to ~/.inbox-orchestrator-app, builds it, and links the `ibo` command.
+# Re-running it updates to the latest version.
 set -euo pipefail
+
+REPO="https://github.com/gunrmic/inbox-orchestrator.git"
+APP_DIR="${IBO_APP_DIR:-$HOME/.inbox-orchestrator-app}"
 
 say() { printf "\033[1m%s\033[0m\n" "$*"; }
 fail() { printf "\033[31m%s\033[0m\n" "$*" >&2; exit 1; }
 
-[[ "$(uname)" == "Darwin" ]] || fail "This installer is for macOS. On Linux, run: npm install -g github:gunrmic/inbox-orchestrator"
+[[ "$(uname)" == "Darwin" ]] || say "Not macOS: installing anyway for development (Reminders and launchd will not work)."
 
 command -v node >/dev/null || fail "Node.js 20+ is required. Install it with: brew install node"
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 (( NODE_MAJOR >= 20 )) || fail "Node.js 20+ is required (found $(node -v))."
 command -v git >/dev/null || fail "git is required. Install Xcode Command Line Tools: xcode-select --install"
 
-say "Installing inbox-orchestrator..."
-npm install -g github:gunrmic/inbox-orchestrator
+# Remove a broken global install left by an earlier `npm install -g github:...` attempt.
+npm uninstall -g inbox-orchestrator >/dev/null 2>&1 || true
+
+if [[ -d "$APP_DIR/.git" ]]; then
+  say "Updating $APP_DIR..."
+  git -C "$APP_DIR" pull --ff-only --quiet
+else
+  say "Downloading to $APP_DIR..."
+  git clone --depth 1 --quiet "$REPO" "$APP_DIR"
+fi
+
+cd "$APP_DIR"
+say "Installing dependencies (better-sqlite3 may compile, this can take a minute)..."
+npm ci --no-fund --no-audit --loglevel=error
+say "Building..."
+npm run build --silent
+chmod +x dist/cli.js
+say "Linking the ibo command..."
+npm link --no-fund --no-audit --loglevel=error >/dev/null
+
+command -v ibo >/dev/null || fail "Installed, but 'ibo' is not on your PATH. Add $(npm prefix -g)/bin to PATH."
 
 if ! command -v claude >/dev/null; then
   say "Claude Code is not installed. It runs code tasks in git projects."
@@ -27,7 +52,7 @@ if ! command -v ollama >/dev/null; then
   echo "  brew install ollama && ollama serve"
 fi
 
-say "Done. Next steps:"
+say "Installed $(ibo --version). Next steps:"
 cat <<'EOF'
   ibo setup          # Anthropic key, Gmail (read-only), local model
   ibo onboard        # discover your projects and tools, answer a few questions

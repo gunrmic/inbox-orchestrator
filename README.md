@@ -55,22 +55,18 @@ flowchart TD
 curl -fsSL https://raw.githubusercontent.com/gunrmic/inbox-orchestrator/main/scripts/install.sh | bash
 ```
 
-The script checks Node and git, installs the `ibo` command globally from this repo, and offers to install Claude Code.
-
-### With npm
-
-```bash
-npm install -g github:gunrmic/inbox-orchestrator
-```
+The script checks Node and git, clones the repo to `~/.inbox-orchestrator-app`, builds it, links the `ibo` command, and offers to install Claude Code. Run it again any time to update.
 
 ### From source
 
 ```bash
 git clone https://github.com/gunrmic/inbox-orchestrator.git
 cd inbox-orchestrator
-npm install        # also builds dist/
+npm ci             # also builds dist/
 npm link           # makes `ibo` available
 ```
+
+`npm install -g github:gunrmic/inbox-orchestrator` is not recommended: npm builds git dependencies in a temporary folder, which is fragile for packages that compile on install.
 
 ### Menu bar app
 
