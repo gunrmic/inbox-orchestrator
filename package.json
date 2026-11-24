@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "os": [
     "darwin",
@@ -38,7 +38,6 @@
     "@anthropic-ai/sdk": "^1.13.0",
     "@inquirer/prompts": "^8.8.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "better-sqlite3": "^13.2.0",
     "commander": "^15.1.0",
     "fastify": "^5.12.8",
     "google-auth-library": "^11.3.4",
@@ -48,7 +47,6 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

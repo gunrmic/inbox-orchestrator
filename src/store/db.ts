@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import type { RiskLevel } from "../config/schema.js";
 import type { ActionRecord, ActionStatus, Decision, Email } from "../types.js";
 
@@ -82,16 +82,17 @@ const toRecord = (r: ActionRow): ActionRecord => ({
 });
 
 export class Store {
-  readonly db: Database.Database;
+  readonly db: DatabaseSync;
 
+  /** Uses Node's built-in SQLite, so installing needs no native compilation. */
   constructor(file: string) {
-    this.db = new Database(file);
-    this.db.pragma("journal_mode = WAL");
+    this.db = new DatabaseSync(file);
+    this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec(SCHEMA);
   }
 
   get(key: string): string | null {
-    const row = this.db.prepare("SELECT value FROM kv WHERE key = ?").get(key) as { value: string } | undefined;
+    const row = this.db.prepare("SELECT value FROM kv WHERE key = ?").get(key) as unknown as { value: string } | undefined;
     return row?.value ?? null;
   }
 
@@ -123,7 +124,7 @@ export class Store {
   }
 
   getEmail(id: string): Email | null {
-    const row = this.db.prepare("SELECT email_json FROM emails WHERE id = ?").get(id) as { email_json: string | null } | undefined;
+    const row = this.db.prepare("SELECT email_json FROM emails WHERE id = ?").get(id) as unknown as { email_json: string | null } | undefined;
     return row?.email_json ? (JSON.parse(row.email_json) as Email) : null;
   }
 
@@ -160,14 +161,14 @@ export class Store {
   }
 
   getAction(id: number): ActionRecord | null {
-    const row = this.db.prepare("SELECT * FROM actions WHERE id = ?").get(id) as ActionRow | undefined;
+    const row = this.db.prepare("SELECT * FROM actions WHERE id = ?").get(id) as unknown as ActionRow | undefined;
     return row ? toRecord(row) : null;
   }
 
   listActions(status?: ActionStatus, limit = 100): ActionRecord[] {
     const rows = status
-      ? (this.db.prepare("SELECT * FROM actions WHERE status = ? ORDER BY id DESC LIMIT ?").all(status, limit) as ActionRow[])
-      : (this.db.prepare("SELECT * FROM actions ORDER BY id DESC LIMIT ?").all(limit) as ActionRow[]);
+      ? (this.db.prepare("SELECT * FROM actions WHERE status = ? ORDER BY id DESC LIMIT ?").all(status, limit) as unknown as ActionRow[])
+      : (this.db.prepare("SELECT * FROM actions ORDER BY id DESC LIMIT ?").all(limit) as unknown as ActionRow[]);
     return rows.map(toRecord);
   }
 
@@ -192,7 +193,7 @@ export class Store {
   }
 
   recentAudit(limit = 50): { at: string; kind: string; detail: string }[] {
-    return this.db.prepare("SELECT at, kind, detail FROM audit ORDER BY id DESC LIMIT ?").all(limit) as {
+    return this.db.prepare("SELECT at, kind, detail FROM audit ORDER BY id DESC LIMIT ?").all(limit) as unknown as {
       at: string;
       kind: string;
       detail: string;
@@ -213,7 +214,7 @@ export class Store {
       .run(projectId, action);
     const row = this.db
       .prepare("SELECT streak FROM approval_streaks WHERE project_id = ? AND action = ?")
-      .get(projectId, action) as { streak: number };
+      .get(projectId, action) as unknown as { streak: number };
     return row.streak;
   }
 

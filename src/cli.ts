@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./util/quiet.js";
 import { readFileSync, existsSync } from "node:fs";
 import { totalmem, platform } from "node:os";
 import { execFile } from "node:child_process";

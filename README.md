@@ -40,7 +40,7 @@ flowchart TD
 ## Requirements
 
 - macOS 13 or later (Linux works for development; Reminders and the background agent need macOS)
-- Node.js 20 or later
+- Node.js 22.13 or later (uses Node's built-in SQLite, so nothing compiles on install)
 - git
 - An [Anthropic API key](https://console.anthropic.com/) for planning
 - A Google account with Gmail
@@ -202,7 +202,7 @@ Everything lives in `~/.inbox-orchestrator/` (override with `IBO_HOME`):
 | `projects.yaml` | Projects, email matching, playbooks, autonomy. See [examples/projects.yaml](examples/projects.yaml) |
 | `tools.yaml` | Confirmed risk level per MCP tool. See [examples/tools.yaml](examples/tools.yaml) |
 | `projects/*.md` | Architecture summary per project, written during onboarding |
-| `state.db` | SQLite: processed emails, actions, audit log, approval streaks |
+| `state.db` | SQLite (Node's built-in `node:sqlite`): processed emails, actions, audit log, approval streaks |
 | `api-token` | Token for the local API (mode 0600) |
 | `worktrees/` | Git worktrees created for code tasks |
 

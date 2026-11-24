@@ -14,9 +14,9 @@ fail() { printf "\033[31m%s\033[0m\n" "$*" >&2; exit 1; }
 
 [[ "$(uname)" == "Darwin" ]] || say "Not macOS: installing anyway for development (Reminders and launchd will not work)."
 
-command -v node >/dev/null || fail "Node.js 20+ is required. Install it with: brew install node"
-NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-(( NODE_MAJOR >= 20 )) || fail "Node.js 20+ is required (found $(node -v))."
+command -v node >/dev/null || fail "Node.js 22.13+ is required. Install it with: brew install node"
+node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=13)?0:1)' \
+  || fail "Node.js 22.13+ is required for its built-in SQLite (found $(node -v)). Run: brew upgrade node"
 command -v git >/dev/null || fail "git is required. Install Xcode Command Line Tools: xcode-select --install"
 
 # Remove a broken global install left by an earlier `npm install -g github:...` attempt.
@@ -31,7 +31,7 @@ else
 fi
 
 cd "$APP_DIR"
-say "Installing dependencies (better-sqlite3 may compile, this can take a minute)..."
+say "Installing dependencies..."
 npm ci --no-fund --no-audit --loglevel=error
 say "Building..."
 npm run build --silent
