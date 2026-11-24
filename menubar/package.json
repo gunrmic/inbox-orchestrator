@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "node ../scripts/stage-cli.mjs && electron-builder --mac dmg --publish never",
+    "dist": "node ../scripts/stage-cli.mjs && electron-builder --mac --publish never",
     "test": "playwright test"
   },
   "dependencies": {

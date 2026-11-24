@@ -68,7 +68,7 @@ jobs:
             unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             npm ci
             node ../scripts/stage-cli.mjs
-            npx electron-builder --mac dmg --publish never -c.mac.identity=-
+            npx electron-builder --mac --publish never -c.mac.identity=-
           fi
           # Fail the release if the app inside the .dmg does not pass a signature check.
           ls -la ../build/dist
