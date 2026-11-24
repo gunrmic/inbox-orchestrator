@@ -90,10 +90,14 @@ jobs:
           # Fail the release if the app inside the .dmg does not pass a signature check.
           ls -la ../build/dist
           test -f ../build/dist/latest-mac.yml
-          hdiutil attach -nobrowse -mountpoint /tmp/ibo-dmg ../build/dist/Inbox-Orchestrator.dmg
-          codesign --verify --deep --strict --verbose=2 "/tmp/ibo-dmg/Inbox Orchestrator.app"
+          # Its own mount folder per run; never left mounted, even when a step fails.
+          MNT="$RUNNER_TEMP/ibo-dmg-$GITHUB_RUN_ID"
+          cleanup() { pkill -f "$MNT/Inbox Orchestrator.app" 2>/dev/null || true; sleep 2; hdiutil detach -force "$MNT" >/dev/null 2>&1 || true; [ -z "${WORK:-}" ] || rm -rf "$WORK"; }
+          trap cleanup EXIT
+          hdiutil attach -nobrowse -mountpoint "$MNT" ../build/dist/Inbox-Orchestrator.dmg
+          codesign --verify --deep --strict --verbose=2 "$MNT/Inbox Orchestrator.app"
           # Smoke test: the daemon inside the app starts on the app's own Node and answers.
-          APP="/tmp/ibo-dmg/Inbox Orchestrator.app"
+          APP="$MNT/Inbox Orchestrator.app"
           export SMOKE_HOME="$(mktemp -d)"
           # A port of its own, so a runner Mac that already runs the agent is not disturbed.
           mkdir -p "$SMOKE_HOME/.ibo" && printf 'server:\n  port: 47899\n' > "$SMOKE_HOME/.ibo/settings.yaml"
@@ -103,9 +107,13 @@ jobs:
           for i in $(seq 1 30); do [ -f "$SMOKE_HOME/.ibo/api-token" ] && curl -sf -H "authorization: Bearer $(cat "$SMOKE_HOME/.ibo/api-token")" http://127.0.0.1:47899/setup/status && break; sleep 1; done
           echo; cat "$SMOKE_HOME/daemon.log"
           curl -sf -H "authorization: Bearer $(cat "$SMOKE_HOME/.ibo/api-token")" http://127.0.0.1:47899/status
-          pkill -f "/tmp/ibo-dmg/Inbox Orchestrator.app/Contents/Resources/cli/dist/cli.js start" || true
+          # Stop the test agent and wait until it has exited, so the disk can be unmounted.
+          pkill -f "$MNT/Inbox Orchestrator.app/Contents/Resources/cli/dist/cli.js start" || true
+          for i in $(seq 1 20); do pgrep -f "$MNT/Inbox Orchestrator.app" >/dev/null || break; sleep 0.5; done
           spctl --assess --type execute --verbose=2 "$APP" || echo "Gatekeeper would block this build (not notarized)."
-          hdiutil detach /tmp/ibo-dmg
+          hdiutil detach -force "$MNT"
+          trap - EXIT
+          [ -z "${WORK:-}" ] || rm -rf "$WORK"
       - uses: actions/upload-artifact@v4
         with:
           name: inbox-orchestrator-dmg
