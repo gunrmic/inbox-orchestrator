@@ -17,7 +17,8 @@ concurrency:
 jobs:
   macos:
     name: macOS full suite and menu bar app
-    runs-on: macos-latest
+    # Your own Mac when the MAC_RUNNER repository variable names its label (no queue), else GitHub's.
+    runs-on: ${{ vars.MAC_RUNNER || 'macos-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
