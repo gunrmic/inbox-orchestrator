@@ -37,7 +37,7 @@ describe("ibo CLI", () => {
     expect(v.code).toBe(0);
     expect(v.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
     const help = await ibo(env, ["--help"]);
-    for (const cmd of ["setup", "onboard", "start", "install-agent", "status", "pending", "approve", "reject", "promote", "kill", "simulate", "doctor"]) {
+    for (const cmd of ["setup", "onboard", "start", "install-agent", "status", "pending", "approve", "reject", "promote", "kill", "simulate", "doctor", "assign", "update", "suggestions"]) {
       expect(help.stdout).toContain(cmd);
     }
   });
@@ -45,7 +45,8 @@ describe("ibo CLI", () => {
   it("doctor reports what is missing on a fresh machine", async () => {
     const r = await ibo(makeEnv(), ["doctor"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toMatch(/✗ Anthropic API key/);
+    expect(r.stdout).toMatch(/✗ Claude  install Claude Code/);
+    expect(r.stdout).toMatch(/✗ Claude Code installed/);
     expect(r.stdout).toMatch(/✗ Gmail connected/);
     expect(r.stdout).toMatch(/✗ Projects mapped/);
     expect(r.stdout).toMatch(/✓ git on PATH/);
@@ -74,7 +75,7 @@ describe("ibo CLI", () => {
     expect(settings.org.allowLocalModels).toBe(false);
 
     const doctor = await ibo(env, ["doctor"]);
-    expect(doctor.stdout).toMatch(/✓ Anthropic API key/);
+    expect(doctor.stdout).toMatch(/✓ Claude via API key/);
     expect(doctor.stdout).toMatch(/✓ Local model server/); // not required when the org blocks local models
   });
 

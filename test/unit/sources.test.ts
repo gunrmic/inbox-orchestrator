@@ -135,7 +135,7 @@ describe("linking signals by name", () => {
     const coleven = c.find((x) => x.project.id === "coleven-capture")!;
     expect(coleven.project.match.domains).toEqual(["coleven.com"]);
     expect(coleven.project.status).toBe("live");
-    expect(coleven.evidence.join("\n")).toMatch(/seen in Cursor[\s\S]*Claude Project "Coleven"[\s\S]*Email from coleven.com/);
+    expect(coleven.evidence.join("\n")).toMatch(/seen in Cursor[\s\S]*Claude Project "Coleven"[\s\S]*coleven.com: 12 emails from them/);
 
     const shamir = c.find((x) => x.project.id === "shamir")!;
     expect(shamir.evidence[0]).toMatch(/1 related chats/);
@@ -145,6 +145,23 @@ describe("linking signals by name", () => {
     expect(acme.project.match.domains).toEqual(["acme.io"]);
     expect(acme.question?.options[0].label).toMatch(/client/);
     expect(c.find((x) => x.project.id === "rare")).toBeUndefined();
+  });
+
+  it("treats domains you reply to or meet with as projects, without asking", () => {
+    const ev: Evidence = {
+      ...base,
+      assistants: undefined,
+      senders: [],
+      recipients: [{ domain: "kibbutz-shamir.org.il", count: 3, last: "2026-11-23T00:00:00Z" }],
+      meetings: [{ domain: "admetec.com", count: 2, last: "2026-11-20T00:00:00Z", titles: ["KOL sync"] }],
+    };
+    const c = proposeDeterministic(ev, now);
+    const shamir = c.find((x) => x.project.id === "kibbutz-shamir")!;
+    expect(shamir.question).toBeUndefined();
+    expect(shamir.evidence[0]).toMatch(/you wrote to them 3 times/);
+    const adm = c.find((x) => x.project.id === "admetec")!;
+    expect(adm.evidence.join(" ")).toMatch(/2 meetings[\s\S]*KOL sync/);
+    expect(adm.confidence).toBe(0.6);
   });
 
   it("works with no assistant exports", () => {

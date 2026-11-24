@@ -20,6 +20,8 @@ export interface ServerUsage {
   lastUsed: string;
   calls: number;
   folders: string[];
+  /** Tool name -> calls. */
+  tools?: Record<string, number>;
 }
 
 export interface SessionScan {
@@ -76,10 +78,13 @@ export async function scanTranscript(
       folder.servers[server] = (folder.servers[server] ?? 0) + 1;
       let s = acc.servers.get(server);
       if (!s) {
-        s = { server, lastUsed: ts ?? "", calls: 0, folders: [] };
+        s = { server, lastUsed: ts ?? "", calls: 0, folders: [], tools: {} };
         acc.servers.set(server, s);
       }
       s.calls += 1;
+      const tool = block.name.slice(`mcp__${server}__`.length);
+      s.tools = s.tools ?? {};
+      s.tools[tool] = (s.tools[tool] ?? 0) + 1;
       s.lastUsed = later(s.lastUsed, ts) ?? "";
       if (!s.folders.includes(cwd)) s.folders.push(cwd);
     }

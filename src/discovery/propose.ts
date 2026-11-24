@@ -14,6 +14,10 @@ export interface Evidence {
   repos: RepoInfo[];
   probes: ServerProbe[];
   senders: { domain: string; count: number; senders: string[]; last: string }[];
+  /** Domains you write to (sent mail). */
+  recipients?: { domain: string; count: number; last: string }[];
+  /** Domains of external people in your meetings. */
+  meetings?: { domain: string; count: number; last: string; titles: string[] }[];
   /** Claude / ChatGPT data exports the user pointed us at. */
   assistants?: AssistantExport[];
 }
@@ -142,16 +146,37 @@ export function linkByName(cands: Candidate[], ev: Evidence, now = Date.now()): 
     }
   }
 
-  for (const d of ev.senders) {
+  // One record per domain across inbound mail, replies and meetings.
+  const domains = new Map<string, { domain: string; received: number; sent: number; met: number; last: string; people: string[]; titles: string[] }>();
+  const rec = (domain: string) => {
+    const d = domains.get(domain) ?? { domain, received: 0, sent: 0, met: 0, last: "", people: [], titles: [] };
+    domains.set(domain, d);
+    return d;
+  };
+  for (const x of ev.senders) Object.assign(rec(x.domain), { received: x.count, people: x.senders }), (rec(x.domain).last = newest(rec(x.domain).last, x.last) ?? "");
+  for (const x of ev.recipients ?? []) (rec(x.domain).sent = x.count), (rec(x.domain).last = newest(rec(x.domain).last, x.last) ?? "");
+  for (const x of ev.meetings ?? []) Object.assign(rec(x.domain), { met: x.count, titles: x.titles }), (rec(x.domain).last = newest(rec(x.domain).last, x.last) ?? "");
+
+  const describe = (d: { domain: string; received: number; sent: number; met: number; last: string }) =>
+    [
+      `${d.domain}:`,
+      [d.received && `${d.received} emails from them`, d.sent && `you wrote to them ${d.sent} times`, d.met && `${d.met} meetings`].filter(Boolean).join(", "),
+      `in 90 days, last ${d.last.slice(0, 10)}`,
+    ].join(" ");
+
+  const ranked = [...domains.values()].sort((a, b) => b.sent * 3 + b.met * 4 + b.received - (a.sent * 3 + a.met * 4 + a.received));
+  for (const d of ranked) {
     const org = orgOfDomain(d.domain);
     const hit = find(org);
     if (hit) {
       if (!hit.project.match.domains.includes(d.domain)) hit.project.match.domains.push(d.domain);
-      hit.evidence.push(`Email from ${d.domain}: ${d.count} messages in 90 days, last ${d.last.slice(0, 10)}`);
+      hit.evidence.push(`Email and calendar, ${describe(d)}`);
       bump(hit, d.last);
       continue;
     }
-    if (d.count < 5) continue;
+    // Two-way contact (you reply, or you meet) is what separates a client from a newsletter.
+    const strong = d.sent >= 2 || d.met >= 1;
+    if (!strong && d.received < 5) continue;
     out.push({
       project: {
         id: slugify(org),
@@ -163,17 +188,19 @@ export function linkByName(cands: Candidate[], ev: Evidence, now = Date.now()): 
         playbook: { create_reminder: { kind: "reminder" } },
         autonomy: {},
       },
-      evidence: [`Email from ${d.domain}: ${d.count} messages in 90 days (${d.senders.slice(0, 3).join(", ")}), last ${d.last.slice(0, 10)}`],
-      confidence: 0.4,
+      evidence: [`Email and calendar, ${describe(d)}`, ...(d.people.length ? [`People: ${d.people.slice(0, 3).join(", ")}`] : []), ...(d.titles.length ? [`Meetings: ${d.titles.slice(0, 3).join("; ")}`] : [])],
+      confidence: strong ? 0.6 : 0.4,
       summary: "",
-      question: {
-        text: `${d.domain} writes to you often. What is it?`,
-        options: [
-          { label: "A client or project of mine", reason: "Mail from them becomes tasks and reminders." },
-          { label: "A vendor or service I use", reason: "Only clear action items become reminders." },
-          { label: "Not relevant", reason: "Skip it." },
-        ],
-      },
+      question: strong
+        ? undefined
+        : {
+            text: `${d.domain} writes to you often, but you rarely reply. What is it?`,
+            options: [
+              { label: "A client or project of mine", reason: "Mail from them becomes tasks and reminders." },
+              { label: "A vendor or service I use", reason: "Only clear action items become reminders." },
+              { label: "Not relevant", reason: "Skip it." },
+            ],
+          },
     });
   }
   return out;
@@ -266,12 +293,15 @@ const PROPOSAL_SCHEMA = {
 const DISCOVERY_SYSTEM = `You map a developer's real projects from evidence collected on their Mac.
 Evidence: code folders seen in Claude Code, Codex, Cursor or VS Code or found as git repos (with the newest
 file change), which MCP servers were used where, read-only listings from their MCP servers (apps, boards, repos),
-email sender domains with counts, and project names and chat titles from Claude or ChatGPT data exports.
+email sender domains with counts, domains the user writes to (strongest sign of a client), domains of
+external meeting attendees, and project names and chat titles from Claude or ChatGPT data exports.
 Many projects have no code on this Mac (hosted builders like Base44, client work done in chats): propose
 them too when an assistant project, chat titles or an email domain points at them.
 Group signals that belong to the same project: an email domain, a code folder or an app on some platform,
 and the MCP servers used for it. Every project can use a different stack. Do not assume any tool.
 For each project, choose executors only from MCP servers and tools that appear in the evidence.
+Servers named claude_ai_<Name> are the user's claude.ai connectors (for example claude_ai_Base44); they are
+reachable through Claude Code and their tool names are in mcpUsage.tools. Use them like any other server.
 Never use a tool whose name suggests publishing, deploying, merging, deleting or sending.
 Skip personal email domains (gmail.com etc.) as project domains unless a specific sender clearly is a client.
 Ask a question only when a link is uncertain, with 2 to 4 options and the recommended one first.
@@ -292,6 +322,8 @@ export async function proposeWithModel(models: ModelRouter, ev: Evidence, now = 
       samples: p.samples,
     })),
     emailDomains: ev.senders.slice(0, 40),
+    domainsYouWriteTo: (ev.recipients ?? []).slice(0, 40),
+    meetingDomains: (ev.meetings ?? []).slice(0, 40),
     assistantProjects: (ev.assistants ?? []).flatMap((a) => a.projects.map((p) => ({ source: a.source, ...p }))),
     recentChatTitles: (ev.assistants ?? []).flatMap((a) => a.titles.slice(0, 150).map((t) => ({ source: a.source, ...t }))),
   };

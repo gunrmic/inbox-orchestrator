@@ -43,12 +43,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.13.0",
+    "@googleapis/calendar": "^20.2.0",
+    "@googleapis/gmail": "^22.1.0",
     "@inquirer/prompts": "^8.8.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "commander": "^15.1.0",
     "fastify": "^5.12.8",
     "google-auth-library": "^11.3.4",
-    "googleapis": "^190.0.0",
     "picocolors": "^1.1.1",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"

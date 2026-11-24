@@ -87,6 +87,9 @@ export function makeEnv(extra: Record<string, string> = {}): Env {
     HOME: home,
     IBO_HOME: iboHome,
     IBO_SECRETS_BACKEND: "file",
+    IBO_CLAUDE_BIN: join(home, "no-claude"),
+    IBO_NO_AUTO_UPDATE: "1",
+    IBO_NO_NOTIFY: "1",
     NO_COLOR: "1",
     ...extra,
   };

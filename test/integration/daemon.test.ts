@@ -73,3 +73,30 @@ describe("daemon poll cycle", () => {
     await expect(emailSource()).rejects.toThrow(/ibo setup gmail/);
   });
 });
+
+describe("daemon chores between polls", () => {
+  it("runs weekly rediscovery when due and stores the suggestions", async () => {
+    const realHome = process.env.HOME;
+    const home = mkdtempSync(join(tmpdir(), "ibo-chores-"));
+    process.env.HOME = home;
+    try {
+      saveSettings(Settings.parse({}));
+      saveProjects({ projects: [] });
+      rt = buildRuntime(() => {});
+      const { maintenance, menubarRunning } = await import("../../src/daemon.js");
+      const logs: string[] = [];
+      await maintenance(rt, (s) => void logs.push(s));
+      expect(rt.store.get("rediscover:last")).not.toBeNull();
+      expect(logs.join("\n")).toMatch(/Weekly discovery/);
+      // Not due again right away.
+      logs.length = 0;
+      await maintenance(rt, (s) => void logs.push(s));
+      expect(logs).toEqual([]);
+      expect(menubarRunning(rt)).toBe(false);
+      rt.store.set("menubar:lastSeen", new Date().toISOString());
+      expect(menubarRunning(rt)).toBe(true);
+    } finally {
+      process.env.HOME = realHome;
+    }
+  });
+});

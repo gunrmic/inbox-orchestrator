@@ -124,6 +124,8 @@ test("approve a card from the menu bar and toggle the kill switch", async () => 
     HOME: ws.home,
     IBO_HOME: ws.iboHome,
     IBO_SECRETS_BACKEND: "file",
+    IBO_CLAUDE_BIN: join(ws.home, "no-claude"),
+    IBO_NO_AUTO_UPDATE: "1",
     IBO_TEST_INBOX: ws.inbox,
     IBO_BLOCK_LOCAL_MODELS: "1",
     ANTHROPIC_API_KEY: "test",
@@ -153,4 +155,41 @@ test("approve a card from the menu bar and toggle the kill switch", async () => 
   // Kill switch from the UI is persisted by the daemon.
   await page.locator("#kill").check();
   await expect.poll(() => readFileSync(join(ws.iboHome, "settings.yaml"), "utf8")).toContain("killSwitch: true");
+});
+
+test("an unknown sender asks which project it belongs to, then gets that project's actions", async () => {
+  const port = await freePort();
+  const ws = workspace(port);
+  const inbox = JSON.parse(readFileSync(ws.inbox, "utf8"));
+  inbox[0] = { ...inbox[0], id: "dana-1", from: "Dana <dana@acme.io>", fromAddress: "dana@acme.io", subject: "Hawk graph is empty" };
+  writeFileSync(ws.inbox, JSON.stringify(inbox));
+  const api = await fakeAnthropic();
+  closeApi = api.close;
+  const env = {
+    HOME: ws.home,
+    IBO_HOME: ws.iboHome,
+    IBO_SECRETS_BACKEND: "file",
+    IBO_CLAUDE_BIN: join(ws.home, "no-claude"),
+    IBO_NO_AUTO_UPDATE: "1",
+    IBO_TEST_INBOX: ws.inbox,
+    IBO_BLOCK_LOCAL_MODELS: "1",
+    ANTHROPIC_API_KEY: "test",
+    ANTHROPIC_BASE_URL: api.url,
+  };
+  daemon = spawn(process.execPath, [CLI, "start"], { env: { ...process.env, ...env } });
+  let out = "";
+  daemon.stdout!.on("data", (d) => (out += d));
+  await expect.poll(() => out, { timeout: 20_000 }).toContain("Watching");
+
+  const page = await launchMenubar(env);
+  const card = page.locator(".card");
+  await expect(card).toHaveCount(1, { timeout: 20_000 });
+  await expect(card.locator(".assign")).toBeVisible();
+  await expect(card.locator(".who")).toHaveText("acme.io");
+  await expect(card.locator(".assign-select option").first()).toHaveText("hawk (recommended)");
+  await card.locator(".assign-btn").click();
+
+  await expect(page.locator("#banner")).toContainText("now goes to hawk");
+  await expect(page.locator(".card .summary")).toHaveText("Open a ticket for the date filter bug", { timeout: 20_000 });
+  expect(readFileSync(join(ws.iboHome, "projects.yaml"), "utf8")).toContain("acme.io");
 });

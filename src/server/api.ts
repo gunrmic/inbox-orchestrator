@@ -4,7 +4,9 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { loadProjects, loadSettings, saveProjects, saveSettings } from "../config/load.js";
 import { paths } from "../config/paths.js";
 import { shouldOfferPromotion } from "../policy/engine.js";
-import { runAction } from "../pipeline/index.js";
+import { processEmail, runAction } from "../pipeline/index.js";
+import { applyAssignment, type AssignInfo } from "../pipeline/assign.js";
+import { listSuggestions, resolveSuggestion } from "../discovery/rediscover.js";
 import type { Runtime } from "../runtime.js";
 
 /** Token the menu bar app uses. Created once, readable only by the user. */
@@ -27,7 +29,8 @@ export function buildApi(rt: Runtime): FastifyInstance {
     if (!same(auth, `Bearer ${token}`)) return reply.code(401).send({ error: "unauthorized" });
   });
 
-  app.get("/status", async () => {
+  app.get("/status", async (req) => {
+    if (req.headers["x-ibo-client"] === "menubar") rt.store.set("menubar:lastSeen", new Date().toISOString());
     const s = rt.settings();
     return {
       mode: s.mode,
@@ -35,7 +38,16 @@ export function buildApi(rt: Runtime): FastifyInstance {
       pending: rt.store.listActions("pending").length,
       projects: rt.projects().map((p) => ({ id: p.id, name: p.name ?? p.id, status: p.status })),
       lastPoll: rt.store.get("gmail:lastPoll"),
+      suggestions: listSuggestions(rt.store).length,
     };
+  });
+
+  app.get("/suggestions", async () => listSuggestions(rt.store));
+
+  app.post<{ Params: { id: string }; Body: { accept: boolean } }>("/suggestions/:id", async (req) => {
+    const res = resolveSuggestion(rt.store, decodeURIComponent(req.params.id), !!req.body?.accept);
+    rt.reload();
+    return res;
   });
 
   app.get<{ Querystring: { status?: string } }>("/actions", async (req) => {
@@ -77,6 +89,31 @@ export function buildApi(rt: Runtime): FastifyInstance {
     if (record.projectId) rt.store.resetStreak(record.projectId, record.action);
     rt.store.audit("rejected", { action: record.action }, { actionId: id });
     return { ok: true };
+  });
+
+  /**
+   * Answer "which project is this sender?" on a card. Saves the sender or domain to the
+   * project (or a new one), then runs the email again so it is planned with that project's tools.
+   */
+  app.post<{ Params: { id: string }; Body: { project: string; name?: string; scope?: "domain" | "sender" } }>("/actions/:id/assign", async (req) => {
+    const id = Number(req.params.id);
+    const record = rt.store.getAction(id);
+    if (!record) return { error: "not found" };
+    const info = record.args._assign as AssignInfo | undefined;
+    if (!info) return { error: "this card has no sender to assign" };
+    if (!req.body?.project) return { error: "project is required" };
+    let projectId: string;
+    try {
+      projectId = applyAssignment({ project: req.body.project, name: req.body.name ?? info.newName, scope: req.body.scope ?? info.scope, domain: info.domain, sender: info.sender });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+    rt.reload();
+    rt.store.updateAction(id, { status: "rejected", result: `Assigned to ${projectId}` });
+    rt.store.audit("assigned", { projectId, scope: req.body.scope ?? info.scope, domain: info.domain, sender: info.sender }, { actionId: id });
+    const email = rt.store.getEmail(record.emailId);
+    const outcome = email ? await processEmail(rt, email, { force: true }) : null;
+    return { projectId, actions: outcome?.actions ?? [] };
   });
 
   /** Make an action automatic for a project. Only level-2 actions can be promoted. */

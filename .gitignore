@@ -7,3 +7,5 @@ coverage/
 .env.*
 menubar/node_modules/
 menubar/dist/
+.ibo-installed
+build/

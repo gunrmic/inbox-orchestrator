@@ -38,6 +38,7 @@ npm ci --ignore-scripts --no-fund --no-audit --loglevel=error
 say "Building..."
 node node_modules/typescript/bin/tsc -p tsconfig.json
 chmod +x dist/cli.js
+touch .ibo-installed  # marks this checkout as an install that may update itself
 npm prune --omit=dev --ignore-scripts --no-fund --no-audit --loglevel=error
 
 say "Linking the ibo command..."
@@ -55,15 +56,13 @@ elif ! command -v claude >/dev/null; then
   [[ "${yn:-y}" =~ ^[Nn] ]] || npm install -g @anthropic-ai/claude-code
 fi
 
-if [[ "${IBO_SKIP_OPTIONAL:-}" != "1" ]] && ! command -v ollama >/dev/null; then
-  say "Optional: Ollama runs email triage locally for free (email stays on your Mac)."
-  echo "  brew install ollama && ollama serve"
+say "Installed $(ibo --version)."
+
+# Updating an existing install, or no terminal to talk to: stop here.
+if [[ "${IBO_SKIP_OPTIONAL:-}" == "1" || "${IBO_NO_SETUP:-}" == "1" ]] || [[ ! -r /dev/tty ]]; then
+  echo "  Run 'ibo setup' to connect Gmail, pick a model and discover your projects."
+  exit 0
 fi
 
-say "Installed $(ibo --version). Next steps:"
-cat <<'EOF'
-  ibo setup          # Anthropic key, Gmail (read-only), local model
-  ibo onboard        # discover your projects and tools, answer a few questions
-  ibo install-agent  # run in the background at login
-  ibo doctor         # check everything
-EOF
+say "Setting up (Gmail sign-in, local model, project discovery)..."
+exec ibo setup </dev/tty

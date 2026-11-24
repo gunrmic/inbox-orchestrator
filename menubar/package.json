@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --mac dmg",
+    "dist": "node ../scripts/stage-cli.mjs && electron-builder --mac dmg --publish never",
     "test": "playwright test"
   },
   "dependencies": {
@@ -33,11 +33,32 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "extendInfo": {
         "LSUIElement": true
       }
+    },
+    "extraResources": [
+      {
+        "from": "../build/cli",
+        "to": "cli",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "dmg": {
+      "title": "Inbox Orchestrator"
+    },
+    "directories": {
+      "output": "../build/dist"
     }
   }
 }

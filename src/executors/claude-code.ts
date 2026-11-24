@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { claudeBin, resultText, runClaude } from "../util/claude-cli.js";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -84,7 +85,7 @@ export async function runClaudeCode(t: ClaudeCodeTask): Promise<string> {
 
   const output = await new Promise<string>((resolve, reject) => {
     const child = spawn(
-      "claude",
+      claudeBin(),
       [
         "-p",
         prompt,
@@ -122,4 +123,28 @@ export async function runClaudeCode(t: ClaudeCodeTask): Promise<string> {
   const { stdout: diffstat } = await run("git", ["-C", worktree, "diff", "--stat", `${t.baseBranch}...HEAD`]);
 
   return [`Branch ${branch} (local only, not pushed)`, `Worktree ${worktree}`, "", summary.trim(), "", diffstat.trim()].join("\n");
+}
+
+/** Connectors from the user's claude.ai account show up in Claude Code as mcp__claude_ai_<Name>__<tool>. */
+export const isClaudeAiServer = (server: string) => server.startsWith("claude_ai_");
+
+/**
+ * Calls one MCP tool through Claude Code, which holds the user's claude.ai connectors
+ * (Base44, Linear, ...). Only that single tool is allowed; nothing else can run.
+ */
+export async function runViaClaudeCode(server: string, tool: string, args: Record<string, unknown>): Promise<string> {
+  const name = `mcp__${server}__${tool}`;
+  const prompt = [
+    `Call the tool ${name} exactly once with these arguments, then reply with its result in a few lines.`,
+    "Do not call any other tool. If the call fails, reply with the error.",
+    "",
+    "<arguments>",
+    JSON.stringify(args, null, 2),
+    "</arguments>",
+  ].join("\n");
+  const out = await runClaude(
+    ["-p", "--output-format", "json", "--max-turns", "3", "--allowedTools", name, "--disallowedTools", DISALLOWED_TOOLS.concat(["Bash", "Edit", "Write"]).join(",")],
+    { input: prompt, timeoutMs: 5 * 60_000 },
+  );
+  return resultText(out).trim();
 }

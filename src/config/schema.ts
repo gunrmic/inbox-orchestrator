@@ -28,6 +28,11 @@ export const PlaybookStep = z.union([
     tool: z.string(),
     /** Optional fixed arguments merged under the planner's arguments. */
     defaults: z.record(z.string(), z.unknown()).optional(),
+    /**
+     * "claude-code" reaches the tool through Claude Code, for connectors that live in the
+     * user's claude.ai account (e.g. claude_ai_Base44) rather than in a local MCP config.
+     */
+    via: z.enum(["direct", "claude-code"]).optional(),
   }),
   z.object({
     kind: z.literal("claude-code"),
@@ -130,5 +135,15 @@ export const Settings = z.object({
       port: z.number().int().default(47811),
     })
     .default({ port: 47811 }),
+  maintenance: z
+    .object({
+      /** Re-run discovery in the background every N days and suggest new or dead projects. 0 = never. */
+      rediscoverDays: z.number().int().min(0).default(7),
+      /** Install new versions automatically (checked daily). */
+      autoUpdate: z.boolean().default(true),
+      /** macOS notifications from the daemon when the menu bar app is not running. */
+      notify: z.boolean().default(true),
+    })
+    .default({ rediscoverDays: 7, autoUpdate: true, notify: true }),
 });
 export type Settings = z.infer<typeof Settings>;

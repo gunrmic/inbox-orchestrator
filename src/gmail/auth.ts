@@ -4,8 +4,8 @@ import { platform } from "node:os";
 import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
 import { getSecret, setSecret } from "../util/secrets.js";
 
-/** Read-only. The agent never sends or deletes mail through Gmail. */
-export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
+/** Read-only. The agent never sends or deletes mail, and never changes the calendar. */
+export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.readonly"];
 
 interface ClientCreds {
   client_id: string;

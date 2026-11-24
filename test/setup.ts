@@ -13,6 +13,10 @@ for (const key of Object.keys(process.env)) {
 process.env.IBO_SECRETS_BACKEND = "file";
 delete process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_BASE_URL;
+// Never reach the real Claude Code (and the user's subscription) from tests.
+process.env.IBO_CLAUDE_BIN = join(tmpdir(), "ibo-test-no-claude");
+process.env.IBO_NO_AUTO_UPDATE = "1";
+process.env.IBO_NO_NOTIFY = "1";
 // Discovery scans ~/projects and friends for git repos; never the real home folder in tests.
 process.env.IBO_SCAN_ROOTS = join(tmpdir(), "ibo-test-no-scan-roots");
 

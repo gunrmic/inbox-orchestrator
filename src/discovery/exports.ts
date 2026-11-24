@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -52,4 +52,40 @@ export function readAssistantExport(path: string): AssistantExport {
     .filter((t) => t.title)
     .sort((a, b) => b.lastActivity.localeCompare(a.lastActivity));
   return { source: isChatGPT ? "ChatGPT" : "Claude", projects, titles };
+}
+
+/**
+ * Claude and ChatGPT exports land in ~/Downloads as a ZIP with conversations.json inside.
+ * Only recent ZIPs are opened, and only their file list is read here.
+ */
+export function findExports(dir = join(process.env.HOME ?? "", "Downloads"), maxAgeDays = 60): string[] {
+  if (!existsSync(dir)) return [];
+  const cutoff = Date.now() - maxAgeDays * 86_400_000;
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return names
+    .filter((n) => n.toLowerCase().endsWith(".zip"))
+    .map((n) => join(dir, n))
+    .filter((p) => {
+      try {
+        const st = statSync(p);
+        return st.mtimeMs >= cutoff && st.size < 4 * 1024 ** 3;
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
+    .slice(0, 30)
+    .filter((p) => {
+      try {
+        const list = execFileSync("unzip", ["-Z1", p], { stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 }).toString();
+        return list.split("\n").some((l) => l.trim() === "conversations.json");
+      } catch {
+        return false;
+      }
+    });
 }

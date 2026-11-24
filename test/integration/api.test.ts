@@ -124,3 +124,62 @@ describe("local API", () => {
     expect(audit[0].kind).toBe("killswitch");
   });
 });
+
+describe("assigning an unknown sender from a card", () => {
+  it("saves the domain to the chosen project and re-plans the email with its tools", async () => {
+    const plans: string[] = [];
+    rt.models = {
+      call: async (_stage: string, req: { name: string; user: string }) => {
+        if (req.name === "triage") return { data: { hasAction: true, intents: ["meeting"], confidence: 0.95 }, model: "fake", fellBack: false };
+        plans.push(req.user);
+        return { data: { rationale: "r", actions: [{ action: "schedule_meeting", summary: "Meet Dana", args: { title: "Meet" } }] }, model: "fake", fellBack: false };
+      },
+      callFallback: async () => {
+        throw new Error("no");
+      },
+    } as never;
+    const { processEmail } = await import("../../src/pipeline/index.js");
+    const out = await processEmail(rt, email({ id: "u1", from: "Dana <dana@acme.io>", fromAddress: "dana@acme.io", subject: "hawk meeting" }));
+    const card = out.actions[0];
+    expect(card.summary).toMatch(/Which project is acme.io/);
+    expect(card.args._assign).toMatchObject({ domain: "acme.io", scope: "domain", suggestions: ["hawk"] });
+
+    const res = await app.inject({ method: "POST", url: `/actions/${card.id}/assign`, headers: auth, payload: { project: "hawk" } });
+    const body = res.json();
+    expect(body.projectId).toBe("hawk");
+    expect(body.actions.map((a: { action: string; status: string }) => `${a.action}:${a.status}`)).toEqual(["schedule_meeting:pending"]);
+    expect(plans).toHaveLength(1);
+    expect(loadProjects().projects.find((p) => p.id === "hawk")!.match.domains).toEqual(["acme.io"]);
+    expect(rt.store.getAction(card.id)!.status).toBe("rejected");
+
+    expect((await app.inject({ method: "POST", url: `/actions/${body.actions[0].id}/assign`, headers: auth, payload: { project: "hawk" } })).json().error).toMatch(/no sender/);
+    expect((await app.inject({ method: "POST", url: `/actions/99999/assign`, headers: auth, payload: { project: "hawk" } })).json().error).toBe("not found");
+  });
+
+  it("validates the request", async () => {
+    rt.store.saveEmail(email({ id: "u2" }), null, {});
+    const card = rt.store.addAction({
+      emailId: "u2",
+      projectId: null,
+      action: "create_reminder",
+      summary: "s",
+      args: { _assign: { domain: "acme.io", sender: "d@acme.io", scope: "domain", suggestions: [], newName: "acme" } },
+      decision: { kind: "suggest", risk: 1, reason: "r" },
+    });
+    expect((await app.inject({ method: "POST", url: `/actions/${card.id}/assign`, headers: auth, payload: {} })).json().error).toMatch(/required/);
+    expect((await app.inject({ method: "POST", url: `/actions/${card.id}/assign`, headers: auth, payload: { project: "ghost" } })).json().error).toMatch(/Unknown project/);
+  });
+});
+
+describe("suggestions from weekly discovery", () => {
+  it("lists them, counts them in /status, and accepts or dismisses them", async () => {
+    rt.store.set("suggestions", JSON.stringify([{ id: "new:fresh", kind: "new", text: "New project found: fresh.", evidence: [], project: { id: "fresh" } }]));
+    const status = (await app.inject({ url: "/status", headers: { ...auth, "x-ibo-client": "menubar" } })).json();
+    expect(status.suggestions).toBe(1);
+    expect(rt.store.get("menubar:lastSeen")).not.toBeNull();
+    expect((await app.inject({ url: "/suggestions", headers: auth })).json()).toHaveLength(1);
+    const res = await app.inject({ method: "POST", url: `/suggestions/${encodeURIComponent("new:fresh")}`, headers: auth, payload: { accept: true } });
+    expect(res.json()).toEqual({ ok: true });
+    expect(rt.projects().map((p) => p.id)).toContain("fresh");
+  });
+});

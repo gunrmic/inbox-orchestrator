@@ -4,7 +4,7 @@ import { platform } from "node:os";
 import type { PlaybookStep, Project } from "../config/schema.js";
 import type { ActionRecord, Email } from "../types.js";
 import { emailAsData } from "../pipeline/prompts.js";
-import { runClaudeCode } from "./claude-code.js";
+import { isClaudeAiServer, runClaudeCode, runViaClaudeCode } from "./claude-code.js";
 import type { McpHub } from "./mcp-hub.js";
 
 const run = promisify(execFile);
@@ -52,7 +52,10 @@ export class DefaultExecutor implements Executor {
         });
       }
       case "mcp": {
-        const args = { ...(step.defaults ?? {}), ...record.args };
+        const { _assign, ...planned } = record.args;
+        const args = { ...(step.defaults ?? {}), ...planned };
+        const viaClaude = step.via === "claude-code" || (step.via !== "direct" && isClaudeAiServer(step.server) && !this.hub.names().includes(step.server));
+        if (viaClaude) return runViaClaudeCode(step.server, step.tool, args);
         return this.hub.callTool(step.server, step.tool, args);
       }
     }

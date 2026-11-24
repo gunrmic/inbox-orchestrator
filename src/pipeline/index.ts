@@ -8,6 +8,7 @@ import type { Store } from "../store/db.js";
 import type { ActionRecord, Email } from "../types.js";
 import type { Executor } from "../executors/index.js";
 import { routeEmail } from "./router.js";
+import { suggestAssignment } from "./assign.js";
 import { filterEmail, planEmail } from "./stages.js";
 
 export interface PipelineDeps {
@@ -34,11 +35,11 @@ function readSummary(project: Project): string {
 }
 
 /** Runs one email through filter, router, planner and policy, then executes what policy allows. */
-export async function processEmail(deps: PipelineDeps, email: Email): Promise<PipelineOutcome> {
+export async function processEmail(deps: PipelineDeps, email: Email, opts: { force?: boolean } = {}): Promise<PipelineOutcome> {
   const { store, models, settings } = deps;
   const log = deps.log ?? (() => {});
 
-  if (store.hasEmail(email.id)) return { emailId: email.id, skipped: "duplicate", projectId: null, actions: [] };
+  if (!opts.force && store.hasEmail(email.id)) return { emailId: email.id, skipped: "duplicate", projectId: null, actions: [] };
 
   const s = settings();
   const filter = await filterEmail(models, s, email);
@@ -51,17 +52,20 @@ export async function processEmail(deps: PipelineDeps, email: Email): Promise<Pi
     return { emailId: email.id, skipped: "no_action", projectId: route.project?.id ?? null, actions: [] };
   }
 
-  // Unknown sender: no planning against project tools. One reminder suggestion and a discovery hint.
+  // Unknown sender: no planning against project tools. One reminder suggestion, and the card
+  // asks which project this sender belongs to, with the likeliest answers first.
   if (!route.project) {
-    const domain = email.fromAddress.split("@")[1] ?? email.fromAddress;
-    store.set(`unmapped:${domain}`, new Date().toISOString());
+    const assign = suggestAssignment(email, deps.projects());
+    store.set(`unmapped:${assign.domain}`, new Date().toISOString());
     const planned = {
       action: "create_reminder",
-      summary: `Follow up: "${email.subject}" from ${email.from} (sender not mapped to a project; run \`ibo onboard\` to map ${domain})`,
+      summary: `Follow up: "${email.subject}" from ${email.from}. Which project is ${assign.scope === "domain" ? assign.domain : assign.sender}?`,
       args: { title: `Follow up: ${email.subject}` },
+      assign,
     };
     const decision = decide({ planned, project: null, needsReactivation: false, email, settings: s, toolRisks: deps.toolRisks() });
-    const record = store.addAction({ emailId: email.id, projectId: null, ...planned, decision });
+    const { assign: info, ...rest } = planned;
+    const record = store.addAction({ emailId: email.id, projectId: null, ...rest, args: { ...rest.args, _assign: info }, decision });
     return { emailId: email.id, projectId: null, actions: [record] };
   }
 

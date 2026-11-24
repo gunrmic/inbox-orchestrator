@@ -28,6 +28,7 @@ function fakeClaude(): string {
   chmodSync(target, 0o755);
   const log = join(bin, "calls.jsonl");
   process.env.PATH = `${bin}:${process.env.PATH}`;
+  process.env.IBO_CLAUDE_BIN = target;
   process.env.FAKE_CLAUDE_LOG = log;
   delete process.env.FAKE_CLAUDE_FAIL;
   return log;

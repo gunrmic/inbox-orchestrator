@@ -42,10 +42,9 @@ flowchart TD
 - macOS 13 or later (Linux works for development; Reminders and the background agent need macOS)
 - Node.js 22.13 or later (uses Node's built-in SQLite, so nothing compiles on install)
 - git
-- An [Anthropic API key](https://console.anthropic.com/) for planning
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) signed in with your Claude plan. The agent plans with it, so no API key is needed. (An [Anthropic API key](https://console.anthropic.com/) works too.)
 - A Google account with Gmail
-- Optional: [Claude Code](https://docs.claude.com/en/docs/claude-code) for code tasks in git projects
-- Optional: [Ollama](https://ollama.com) to run email triage locally for free
+- Optional: [Ollama](https://ollama.com) to triage email locally for free. Setup installs it with Homebrew if you agree.
 
 ## Install
 
@@ -55,7 +54,7 @@ flowchart TD
 curl -fsSL https://raw.githubusercontent.com/gunrmic/inbox-orchestrator/main/scripts/install.sh | bash
 ```
 
-The script checks Node and git, clones the repo to `~/.inbox-orchestrator-app`, builds it, links the `ibo` command, and offers to install Claude Code. Run it again any time to update.
+The script checks Node and git, clones the repo to `~/.inbox-orchestrator-app`, builds it, links the `ibo` command, offers to install Claude Code, and then goes straight into `ibo setup`. That is the whole install: one command and a Google sign-in. The agent updates itself daily after that.
 
 ### From source
 
@@ -68,32 +67,37 @@ npm link           # makes `ibo` available
 
 `npm install -g github:gunrmic/inbox-orchestrator` is not recommended: npm builds git dependencies in a temporary folder, which is fragile for packages that compile on install.
 
-### Menu bar app
+### Menu bar app (.dmg, no terminal)
 
-The menu bar app is a small Electron app that talks to the local daemon.
+Download the `.dmg` from [Releases](https://github.com/gunrmic/inbox-orchestrator/releases). The daemon and CLI ship inside the app and run on its built-in Node, so you do not need Node, git or a terminal. On first launch it opens setup in a Terminal window, starts at login, and runs the daemon itself.
+
+Notifications come with **Do it** and **Dismiss** buttons for levels 0 to 2, so most cards never need the window. Level 3 and "which project?" questions open it.
+
+Build it yourself:
 
 ```bash
-cd menubar
-npm install
-npm start          # run it
-npm run dist       # build a .dmg in menubar/dist
+npm ci && npm run build
+cd menubar && npm ci
+npm run dist       # build/dist/Inbox Orchestrator-<version>.dmg
 ```
 
-The `.dmg` is not signed or notarized yet, so the first time you open it, right-click the app and choose **Open**. You can use everything from the terminal too (`ibo pending`, `ibo approve <id>`).
+Until the app is signed and notarized, the first time you open it, right-click it and choose **Open**. The release workflow signs and notarizes automatically when the Apple secrets are set (see `.github/workflows/release.yml`). You can use everything from the terminal too (`ibo pending`, `ibo approve <id>`).
 
 ## Setup
 
-### 1. Connect everything
+### 1. One command
 
 ```bash
 ibo setup
 ```
 
-This asks for three things and is safe to re-run (`ibo setup anthropic`, `ibo setup gmail`, `ibo setup models` do one part):
+The installer runs this for you. It skips whatever is already done, so it is safe to re-run. `ibo setup <part>` runs one step: `claude`, `gmail`, `models`, `onboard`, `agent`.
 
-- **Anthropic API key.** Stored in the macOS Keychain, never in a config file.
-- **Gmail, read-only.** See below.
-- **Local model.** If Ollama is running, the agent suggests a model size based on your Mac's memory.
+1. **Claude.** If Claude Code is installed and signed in, the agent uses it through `claude -p` (single turn, every tool off), so planning runs on your Claude plan and there is no key to paste. With an API key in the Keychain, the key wins.
+2. **Gmail and Calendar, read-only.** One Google sign-in. See below.
+3. **Local model.** Installs Ollama with Homebrew if you agree, starts it, and downloads a model sized to your Mac's memory.
+4. **Project discovery.** See step 3.
+5. **Background agent.** Starts at login.
 
 ### 2. Connect Gmail
 
@@ -103,7 +107,7 @@ ibo setup gmail
 
 A browser window opens. Sign in with Google and allow **read-only** access. That's it.
 
-- The scope is `gmail.readonly`: the agent cannot send, delete or modify mail.
+- The scopes are `gmail.readonly` and `calendar.readonly`: the agent cannot send, delete or modify mail, or change your calendar. Calendar is used only during discovery, to see who you meet with.
 - The refresh token is stored in your macOS Keychain. Mail is read from your Mac straight to Google's API; no inbox-orchestrator server ever sees it.
 - The sign-in uses the project's shared Google OAuth client (a Desktop app client with PKCE). While the app is in Google's verification process, Google shows an "unverified app" screen: click **Advanced > Go to inbox-orchestrator**.
 
@@ -121,7 +125,7 @@ or set `IBO_GOOGLE_CLIENT_ID` and `IBO_GOOGLE_CLIENT_SECRET`. Note: a client in 
 ibo onboard
 ```
 
-Chats in claude.ai, ChatGPT and Gemini are stored on their servers, not on your Mac, so they are only read if you export them: claude.ai **Settings > Privacy > Export data**, or ChatGPT **Settings > Data controls > Export data**. Then:
+Chats in claude.ai, ChatGPT and Gemini are stored on their servers, not on your Mac, so they are only read if you export them: claude.ai **Settings > Privacy > Export data**, or ChatGPT **Settings > Data controls > Export data**. Onboarding finds the export in `~/Downloads` and asks before using it. Or pass it yourself:
 
 ```bash
 ibo onboard --import ~/Downloads/data-2026-11-24.zip
@@ -137,6 +141,8 @@ The agent collects evidence on your Mac, then asks you short questions with opti
 | `~/.claude/projects` (Claude Code session history) | Which MCP servers you actually used, in which project folder, and when |
 | `~/.codex/sessions` (Codex CLI) | Folders you worked in with Codex |
 | Cursor, VS Code and Windsurf workspace history | Folders you opened in an editor |
+| Gmail headers, sent mail (90 days) | Who you write back to: the strongest sign of a client |
+| Google Calendar (90 days) | Domains of people outside your company you meet with |
 | Git repos under `~/projects`, `~/apps`, `~/code`, `~/dev`, `~/src`, ... (`IBO_SCAN_ROOTS` to change) | Projects you never opened in any of those tools |
 | Newest file change in each folder (ignoring `node_modules`, build output) | Whether work is happening even without commits. Folders found only by an editor or the scan are dropped after 180 days with no changes |
 | A Claude or ChatGPT data export, if you pass one with `--import` | Your Claude Projects and recent chat titles, for projects with no code on this Mac |
@@ -160,6 +166,19 @@ ibo doctor          # checks keys, Gmail, Claude Code, Ollama, projects
 
 On its first run the agent records where your inbox is and starts from new mail. It never replays old email.
 
+### It keeps learning
+
+- **"Which project is this?"** Mail from a sender that is not mapped to any project gets a card that asks, with the likeliest project first (or a new one). Your answer is saved to `projects.yaml`, and the email is planned again with that project's tools. From the terminal: `ibo assign <id> <project|new>`.
+- **Weekly rediscovery.** Every 7 days the agent runs discovery in the background and suggests new projects, projects that went quiet, and ones that came back. They wait in the menu bar (`ibo suggestions` in the terminal). Nothing changes until you accept.
+- **Automatic updates.** Installs made with the installer check for a new version daily, build it, check that it starts, and restart. If the new version does not build, it stays on the old one. `ibo update` does it now.
+- **Notifications.** Without the menu bar app, the daemon still sends a plain macOS notification when a card is waiting.
+
+Turn any of these off in `settings.yaml` under `maintenance` (`rediscoverDays: 0`, `autoUpdate: false`, `notify: false`).
+
+### Connectors from claude.ai (Base44 and friends)
+
+Connectors you added in claude.ai are not in any config file on your Mac, but Claude Code can use them when it is signed in to the same account. Discovery sees them in your Claude Code history as servers named `claude_ai_<Name>` (for example `claude_ai_Base44`) and can put them in a playbook. The agent then calls that one tool through `claude -p` with only that tool allowed. Risk levels and approvals work exactly like local MCP tools.
+
 To try the pipeline without Gmail:
 
 ```bash
@@ -171,7 +190,7 @@ ibo simulate --from "Jack <jack@client.com>" --subject "Graph is broken" \
 
 | Command | What it does |
 | --- | --- |
-| `ibo setup [part]` | Connect Anthropic, Gmail and a local model |
+| `ibo setup [part]` | Everything in one go: Claude, Gmail, local model, discovery, background agent |
 | `ibo onboard` | Discover projects and tools, ask questions, write config |
 | `ibo start` | Run the daemon in the foreground |
 | `ibo install-agent` / `uninstall-agent` | Run in the background at login |
@@ -180,6 +199,9 @@ ibo simulate --from "Jack <jack@client.com>" --subject "Graph is broken" \
 | `ibo approve <id>` / `reject <id>` | Act on a card |
 | `ibo promote <project> <action>` | Make a level-2 action automatic for one project |
 | `ibo kill [on\|off]` | Kill switch: nothing executes, everything becomes a card |
+| `ibo assign <id> <project\|new>` | Answer "which project is this sender?" for a card |
+| `ibo suggestions` | Projects found by the weekly discovery, or that went quiet |
+| `ibo update` | Update now (the agent also checks daily) |
 | `ibo simulate ...` | Push a fake email through the pipeline |
 | `ibo doctor` | Check the installation |
 
@@ -205,7 +227,7 @@ Every action resolves to a risk level. The level comes from code and from `tools
 | --- | --- | --- |
 | Filter (is there an action?) | Local (Ollama) | Most of the volume. A yes/no answer, so a small model is enough, and the mail stays on your Mac |
 | Routing | No model | Deterministic match on sender, domain, keywords |
-| Planning | Claude (paid) | A mistake here becomes a wrong action. Small models are weaker at tool choice and at resisting prompt injection |
+| Planning | Claude (your Claude Code login, or an API key) | A mistake here becomes a wrong action. Small models are weaker at tool choice and at resisting prompt injection |
 | Code tasks | Claude Code | Runs on Anthropic models |
 | Onboarding | Claude (paid) | Runs once; the quality of the mapping drives everything else |
 
@@ -241,7 +263,8 @@ Every incoming email is untrusted input. Anyone who has your address can try to 
 - **Unknown senders get nothing.** Mail from a sender that is not mapped to a project never reaches the planner or any project tool. At most it becomes a reminder suggestion.
 - **Spoofing check.** Mail that passes neither SPF nor DKIM (including mail with no authentication results) can never trigger code execution, and its other actions become cards.
 - **Code runs isolated.** Claude Code works in a new git worktree on a new branch, with an allow-list of tools: no network tools, no `git push`, no `git remote`. Changes are committed locally only. Pushing or opening a PR can only happen through a separate action mapped to one of your MCP tools, at level 2 or higher.
-- **Read-only Gmail.** The OAuth scope is `gmail.readonly`.
+- **Read-only Google access.** The OAuth scopes are `gmail.readonly` and `calendar.readonly`.
+- **Planning through Claude Code runs with every tool off** (`--max-turns 1`, no built-in tools, no MCP servers), so an email cannot make it do anything but answer.
 - **Local API.** Bound to 127.0.0.1 and protected by a random token.
 - **Audit log.** Every filter result, plan, decision, approval, execution, fallback and kill-switch change is recorded in `state.db`.
 - **Kill switch.** `ibo kill` or the checkbox in the menu bar turns every action into a card.
@@ -309,16 +332,15 @@ Use `git commit --no-verify` only in an emergency; CI runs the same checks anywa
 ## Roadmap
 
 - [ ] Gmail push notifications (Pub/Sub) instead of polling
-- [ ] Signed and notarized `.dmg`, Homebrew cask
+- [ ] Apple Developer signing for the `.dmg`, Homebrew cask
 - [ ] Outlook / Microsoft 365 source
 - [ ] Run code tasks in a container in addition to a worktree
 - [ ] Per-project activity thresholds
 - [ ] Undo for level-1 actions from the menu bar
-- [ ] Re-run discovery in the background when mail arrives from an unmapped domain
 
 ## Known limitations
 
-- Connectors that exist only in claude.ai are not visible from the Mac. Add them as local MCP servers to use them here.
+- Connectors that exist only in claude.ai are reached through Claude Code. A connector you never used in Claude Code does not appear in discovery; add it by hand at the end of onboarding.
 - When the Mac sleeps, nothing runs. On wake, history sync picks up what arrived.
 - The model names in the default settings are configurable. If a default is not available on your account or in Ollama, change it in `settings.yaml`.
 

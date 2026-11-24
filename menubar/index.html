@@ -12,6 +12,7 @@
       <label class="kill"><input type="checkbox" id="kill" /> Kill switch</label>
     </header>
     <div id="banner" class="banner" hidden></div>
+    <section id="suggestions" hidden></section>
     <main id="cards"></main>
     <footer id="footer"></footer>
     <template id="card">
@@ -20,6 +21,10 @@
         <h3 class="summary"></h3>
         <p class="email"></p>
         <p class="reason"></p>
+        <div class="assign" hidden>
+          <label>Which project is <span class="who"></span>? <select class="assign-select"></select></label>
+          <button class="assign-btn">Save</button>
+        </div>
         <details class="args-wrap"><summary>Edit details</summary><textarea class="args" rows="6"></textarea></details>
         <div class="buttons">
           <button class="approve">Do it</button>

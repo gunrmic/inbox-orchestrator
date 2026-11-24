@@ -19,3 +19,7 @@ footer { padding: 6px 12px; font-size: 11px; opacity: .6; border-top: 1px solid 
 textarea { width: 100%; box-sizing: border-box; font: 11px ui-monospace, Menlo, monospace; }
 .buttons { display: flex; gap: 6px; margin-top: 8px; }
 .empty { opacity: .6; text-align: center; margin-top: 40px; }
+.assign { margin: 6px 0; padding: 6px; border-radius: 6px; background: rgba(52,152,219,.12); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.assign select { max-width: 220px; }
+#suggestions { margin: 8px 12px 0; padding: 8px; border-radius: 6px; background: rgba(46,204,113,.14); font-size: 12px; }
+#suggestions .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; }

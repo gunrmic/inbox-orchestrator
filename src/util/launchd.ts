@@ -11,7 +11,10 @@ export const plistPath = () => join(homedir(), "Library", "LaunchAgents", `${LAB
 
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export function renderPlist(nodePath: string, cliPath: string, envPath: string): string {
+export function renderPlist(nodePath: string, cliPath: string, envPath: string, extraEnv: Record<string, string> = {}): string {
+  const extra = Object.entries(extraEnv)
+    .map(([k, v]) => `\n    <key>${xml(k)}</key><string>${xml(v)}</string>`)
+    .join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -25,7 +28,7 @@ export function renderPlist(nodePath: string, cliPath: string, envPath: string):
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>${xml(envPath)}</string>
+    <key>PATH</key><string>${xml(envPath)}</string>${extra}
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -44,7 +47,9 @@ export async function installAgent(cliPath: string): Promise<string> {
   mkdirSync(dirname(file), { recursive: true });
   mkdirSync(paths.logs, { recursive: true });
   // Keep the user's PATH so `claude`, `git` and MCP server commands (npx, uvx) resolve.
-  writeFileSync(file, renderPlist(process.execPath, cliPath, process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin"));
+  // Inside the .dmg app the "node" binary is Electron, which runs scripts only with this flag.
+  const extra: Record<string, string> = process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {};
+  writeFileSync(file, renderPlist(process.execPath, cliPath, process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", extra));
   const uid = process.getuid?.() ?? 501;
   await run("launchctl", ["bootout", `gui/${uid}/${LABEL}`]).catch(() => undefined);
   await run("launchctl", ["bootstrap", `gui/${uid}`, file]);

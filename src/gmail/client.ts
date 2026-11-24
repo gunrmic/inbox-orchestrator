@@ -1,4 +1,4 @@
-import { google, type gmail_v1 } from "googleapis";
+import { gmail as gmailApi, type gmail_v1 } from "@googleapis/gmail";
 import type { OAuth2Client } from "google-auth-library";
 import type { Store } from "../store/db.js";
 import type { Email } from "../types.js";
@@ -11,7 +11,7 @@ export class GmailSource implements EmailSource {
   /** Pass a ready Gmail API object to inject a fake in tests. */
   constructor(auth: OAuth2Client | null, gmail?: gmail_v1.Gmail) {
     if (gmail) this.gmail = gmail;
-    else if (auth) this.gmail = google.gmail({ version: "v1", auth });
+    else if (auth) this.gmail = gmailApi({ version: "v1", auth });
     else throw new Error("GmailSource needs an OAuth client or a Gmail API object.");
   }
 
@@ -114,6 +114,48 @@ export class GmailSource implements EmailSource {
     return [...byDomain.entries()]
       .map(([domain, d]) => ({ domain, count: d.count, senders: [...d.senders], last: d.last }))
       .sort((a, b) => b.count - a.count);
+  }
+
+  /**
+   * Who you write to (To and Cc of sent mail), by domain. A domain you keep replying to is
+   * almost always a client or a project, which makes this a stronger signal than inbound mail.
+   */
+  async recipientStats(days = 90, max = 800): Promise<{ domain: string; count: number; last: string }[]> {
+    const own = new Set<string>();
+    try {
+      const me = (await this.gmail.users.getProfile({ userId: "me" })).data.emailAddress;
+      if (me) own.add(me.split("@")[1]?.toLowerCase() ?? "");
+    } catch {
+      /* profile is optional */
+    }
+    const byDomain = new Map<string, { count: number; last: string }>();
+    let pageToken: string | undefined;
+    let seen = 0;
+    do {
+      const list = await this.gmail.users.messages.list({ userId: "me", q: `in:sent newer_than:${days}d`, maxResults: 500, pageToken });
+      for (const m of list.data.messages ?? []) {
+        if (!m.id || seen >= max) break;
+        seen += 1;
+        const res = await this.gmail.users.messages.get({ userId: "me", id: m.id, format: "metadata", metadataHeaders: ["To", "Cc"] });
+        const date = new Date(Number(res.data.internalDate ?? 0)).toISOString();
+        const domains = new Set<string>();
+        for (const h of res.data.payload?.headers ?? []) {
+          if (!["to", "cc"].includes(h.name?.toLowerCase() ?? "")) continue;
+          for (const part of (h.value ?? "").split(",")) {
+            const d = addressOf(part).split("@")[1]?.toLowerCase();
+            if (d && !own.has(d) && !PERSONAL_DOMAINS.has(d)) domains.add(d);
+          }
+        }
+        for (const d of domains) {
+          const cur = byDomain.get(d) ?? { count: 0, last: date };
+          cur.count += 1;
+          if (date > cur.last) cur.last = date;
+          byDomain.set(d, cur);
+        }
+      }
+      pageToken = seen < max ? (list.data.nextPageToken ?? undefined) : undefined;
+    } while (pageToken);
+    return [...byDomain.entries()].map(([domain, d]) => ({ domain, ...d })).sort((a, b) => b.count - a.count);
   }
 }
 

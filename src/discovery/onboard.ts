@@ -10,9 +10,10 @@ import type { ModelRouter } from "../models/router.js";
 import { suggestRisk } from "../policy/risk.js";
 import { authorizedClient } from "../gmail/auth.js";
 import { GmailSource, PERSONAL_DOMAINS } from "../gmail/client.js";
+import { meetingStats } from "../gmail/calendar.js";
 import { lastFileChange, newest, repoInfo } from "./activity.js";
 import { scanCodexSessions, scanEditorWorkspaces } from "./editors.js";
-import { readAssistantExport, type AssistantExport } from "./exports.js";
+import { findExports, readAssistantExport, type AssistantExport } from "./exports.js";
 import { scanClaudeSessions } from "./claude-sessions.js";
 import { findRepos } from "./repos.js";
 import { discoverMcpServers } from "./mcp-configs.js";
@@ -95,16 +96,35 @@ export async function gatherEvidence(log: (s: string) => void, imports: string[]
   }
 
   let senders: Evidence["senders"] = [];
+  let recipients: Evidence["recipients"] = [];
+  let meetings: Evidence["meetings"] = [];
+  let auth: Awaited<ReturnType<typeof authorizedClient>> | null = null;
   try {
-    log("Reading email senders from the last 90 days (metadata only)...");
-    const gmail = new GmailSource(await authorizedClient());
-    senders = (await gmail.senderStats(90)).filter((d) => !PERSONAL_DOMAINS.has(d.domain));
-    log(`  ${senders.length} sender domains`);
+    auth = await authorizedClient();
   } catch (err) {
-    log(pc.yellow(`  skipped: ${err instanceof Error ? err.message : err}`));
+    log(pc.yellow(`Email and calendar skipped: ${err instanceof Error ? err.message : err}`));
+  }
+  if (auth) {
+    const gmail = new GmailSource(auth);
+    try {
+      log("Reading who emails you and who you reply to, last 90 days (headers only)...");
+      senders = (await gmail.senderStats(90)).filter((d) => !PERSONAL_DOMAINS.has(d.domain));
+      recipients = await gmail.recipientStats(90);
+      log(`  ${senders.length} sender domains, ${recipients.length} domains you write to`);
+    } catch (err) {
+      log(pc.yellow(`  skipped: ${err instanceof Error ? err.message : err}`));
+    }
+    try {
+      log("Reading meetings with people outside your domain, last 90 days...");
+      meetings = await meetingStats(auth, 90);
+      log(`  ${meetings.length} domains you met with`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log(pc.yellow(/insufficient|scope|403/i.test(msg) ? "  skipped: run `ibo setup gmail` again to allow Calendar (read-only)" : `  skipped: ${msg}`));
+    }
   }
 
-  return { evidence: { sessions, repos, probes, senders, assistants }, hub };
+  return { evidence: { sessions, repos, probes, senders, recipients, meetings, assistants }, hub };
 }
 
 function toolRiskFor(ev: Evidence, server: string, tool: string): RiskLevel {
@@ -186,12 +206,15 @@ async function askManualProject(ev: Evidence): Promise<Project> {
       playbook.prepare_fix = { kind: "claude-code", repo: folder, baseBranch: repo.defaultBranch ?? "main" };
     }
   } else if (where === "mcp") {
-    const servers = discoverMcpServers().map((s) => s.name);
+    // Local MCP configs, plus claude.ai connectors (Base44, ...) seen in Claude Code sessions.
+    const seen = ev.sessions.servers.filter((s) => s.server.startsWith("claude_ai_"));
+    const servers = [...new Set([...discoverMcpServers().map((s) => s.name), ...seen.map((s) => s.server)])];
     if (servers.length === 0) {
-      console.log(pc.yellow("  No MCP servers are configured in Claude Code or Claude Desktop on this Mac, so tasks will be reminders for now."));
+      console.log(pc.yellow("  No MCP servers found in Claude Code, Claude Desktop or your claude.ai connectors, so tasks will be reminders for now."));
     } else {
       const server = await select({ message: "Which MCP server?", choices: servers.map((s) => ({ name: s, value: s })) });
-      const tools = ev.probes.find((p) => p.server === server)?.tools.map((t) => t.name) ?? [];
+      const usage = ev.sessions.servers.find((s) => s.server === server)?.tools ?? {};
+      const tools = ev.probes.find((p) => p.server === server)?.tools.map((t) => t.name) ?? Object.keys(usage).sort((a, b) => usage[b] - usage[a]);
       const tool = tools.length
         ? await select({ message: "Tool to use for new tasks:", choices: tools.map((t) => ({ name: t, value: t })) })
         : (await input({ message: "Tool name for new tasks:" })).trim();
@@ -218,7 +241,16 @@ export async function onboard(models: ModelRouter | null, opts: { assumeYes?: bo
   const assumeYes = !!opts.assumeYes;
   ensureHome();
   const log = (s: string) => console.log(s);
-  const { evidence, hub } = await gatherEvidence(log, opts.imports ?? []);
+  const imports = [...(opts.imports ?? [])];
+  if (imports.length === 0 && !assumeYes) {
+    for (const file of findExports()) {
+      const name = file.split("/").pop();
+      if (await confirm({ message: `Found a Claude or ChatGPT export in Downloads (${name}). Use its project names and chat titles?`, default: true })) {
+        imports.push(file);
+      }
+    }
+  }
+  const { evidence, hub } = await gatherEvidence(log, imports);
 
   let candidates: Candidate[];
   if (models) {

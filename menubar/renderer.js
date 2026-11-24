@@ -32,6 +32,65 @@ async function act(id, kind, args) {
   window.ibo.refresh();
 }
 
+/** "Which project is this sender?" with the likeliest project first, then the rest, then "new". */
+function renderAssign(node, a, assign, projects) {
+  const box = node.querySelector(".assign");
+  box.hidden = false;
+  node.querySelector(".who").textContent = assign.scope === "domain" ? assign.domain : assign.sender;
+  const select = node.querySelector(".assign-select");
+  const order = [...assign.suggestions, ...projects.map((p) => p.id).filter((id) => !assign.suggestions.includes(id))];
+  const options = [
+    ...order.map((id, i) => [id, `${id}${i === 0 && assign.suggestions.length ? " (recommended)" : ""}`]),
+    ["new", `New project: ${assign.newName}${assign.suggestions.length ? "" : " (recommended)"}`],
+  ];
+  if (!assign.suggestions.length) options.unshift(options.pop());
+  for (const [value, label] of options) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    select.appendChild(o);
+  }
+  node.querySelector(".assign-btn").onclick = async () => {
+    const res = await window.ibo.call(`/actions/${a.id}/assign`, "POST", { project: select.value });
+    if (res.error) banner(res.error);
+    else banner(`Saved: mail from ${assign.scope === "domain" ? assign.domain : assign.sender} now goes to ${res.projectId}.`);
+    await render();
+    window.ibo.refresh();
+  };
+}
+
+/** Weekly discovery results: new projects, or projects that went quiet. */
+async function renderSuggestions(status) {
+  const box = $("#suggestions");
+  if (!status.suggestions) {
+    box.hidden = true;
+    return;
+  }
+  const list = await window.ibo.call("/suggestions");
+  box.hidden = list.length === 0;
+  box.innerHTML = "<strong>Found while you worked</strong>";
+  for (const s of list) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const text = document.createElement("span");
+    text.textContent = s.text;
+    text.title = s.evidence.join("\n");
+    const yes = document.createElement("button");
+    yes.textContent = s.kind === "new" ? "Add" : "Update";
+    const no = document.createElement("button");
+    no.textContent = "Ignore";
+    const answer = (accept) => async () => {
+      await window.ibo.call(`/suggestions/${encodeURIComponent(s.id)}`, "POST", { accept });
+      render();
+      window.ibo.refresh();
+    };
+    yes.onclick = answer(true);
+    no.onclick = answer(false);
+    row.append(text, yes, no);
+    box.appendChild(row);
+  }
+}
+
 async function render() {
   let status;
   try {
@@ -43,6 +102,7 @@ async function render() {
   $("#kill").checked = status.killSwitch;
   $("#footer").textContent = `Mode: ${status.mode} · ${status.projects.length} projects · last check ${status.lastPoll ? new Date(status.lastPoll).toLocaleTimeString() : "never"}`;
 
+  await renderSuggestions(status);
   const pending = await window.ibo.call("/actions?status=pending");
   const root = $("#cards");
   root.innerHTML = "";
@@ -62,8 +122,10 @@ async function render() {
       email.onclick = () => window.ibo.open(`https://mail.google.com/mail/u/0/#all/${a.email.threadId}`);
     }
     node.querySelector(".reason").textContent = a.reason;
+    const { _assign: assign, ...args } = a.args || {};
+    if (assign) renderAssign(node, a, assign, status.projects);
     const ta = node.querySelector(".args");
-    ta.value = JSON.stringify(a.args, null, 2);
+    ta.value = JSON.stringify(args, null, 2);
     node.querySelector(".approve").onclick = () => act(a.id, "approve");
     node.querySelector(".reject").onclick = () => act(a.id, "reject");
     node.querySelector(".edit").onclick = () => {
