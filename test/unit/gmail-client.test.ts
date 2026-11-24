@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { GmailSource, PERSONAL_DOMAINS } from "../../src/gmail/client.js";
 import { FixtureSource } from "../../src/gmail/source.js";
-import { parseClientJson, authorizedClient, saveClientCredentials } from "../../src/gmail/auth.js";
+import { parseClientJson, authorizedClient, saveClientCredentials, clientCredentials, BUILTIN_CLIENT } from "../../src/gmail/auth.js";
 import { setSecret } from "../../src/util/secrets.js";
 import { Store } from "../../src/store/db.js";
 import { email } from "../helpers.js";
@@ -130,8 +130,22 @@ describe("Gmail auth", () => {
     expect(() => parseClientJson("{}")).toThrow(/client_id/);
   });
 
-  it("needs a client and a refresh token before it can authorize", async () => {
-    await expect(authorizedClient()).rejects.toThrow(/ibo setup gmail/);
+  it("uses the built-in client unless a saved client or env vars override it", async () => {
+    expect(await clientCredentials()).toMatchObject({ ...BUILTIN_CLIENT, source: "builtin" });
+    await saveClientCredentials(JSON.stringify({ installed: { client_id: "mine", client_secret: "s" } }));
+    expect(await clientCredentials()).toMatchObject({ client_id: "mine", source: "saved" });
+    process.env.IBO_GOOGLE_CLIENT_ID = "env-id";
+    process.env.IBO_GOOGLE_CLIENT_SECRET = "env-sec";
+    try {
+      expect(await clientCredentials()).toMatchObject({ client_id: "env-id", source: "env" });
+    } finally {
+      delete process.env.IBO_GOOGLE_CLIENT_ID;
+      delete process.env.IBO_GOOGLE_CLIENT_SECRET;
+    }
+  });
+
+  it("needs a refresh token before it can authorize", async () => {
+    await expect(authorizedClient()).rejects.toThrow(/not connected/);
     await saveClientCredentials(JSON.stringify({ installed: { client_id: "id", client_secret: "sec" } }));
     await expect(authorizedClient()).rejects.toThrow(/not connected/);
     await setSecret("google-refresh-token", "rt");

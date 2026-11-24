@@ -97,13 +97,23 @@ This asks for three things and is safe to re-run (`ibo setup anthropic`, `ibo se
 
 ### 2. Connect Gmail
 
-inbox-orchestrator uses your own Google OAuth client, so no third party ever holds a token to your mail. The scope is `gmail.readonly`: the agent cannot send, delete or modify mail.
+```bash
+ibo setup gmail
+```
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/), create a project (any name).
-2. **APIs & Services > Library**: enable the **Gmail API**.
-3. **APIs & Services > OAuth consent screen**: choose *External*, fill in the app name and your email, and add yourself under **Test users**.
-4. **APIs & Services > Credentials > Create credentials > OAuth client ID**: application type **Desktop app**. Download the JSON.
-5. Run `ibo setup gmail`, give it the path to the JSON, and sign in in the browser that opens.
+A browser window opens. Sign in with Google and allow **read-only** access. That's it.
+
+- The scope is `gmail.readonly`: the agent cannot send, delete or modify mail.
+- The refresh token is stored in your macOS Keychain. Mail is read from your Mac straight to Google's API; no inbox-orchestrator server ever sees it.
+- The sign-in uses the project's shared Google OAuth client (a Desktop app client with PKCE). While the app is in Google's verification process, Google shows an "unverified app" screen: click **Advanced > Go to inbox-orchestrator**.
+
+**Bring your own OAuth client (optional).** If your organization requires its own Google Cloud project, create a *Desktop app* OAuth client with the Gmail API enabled and run:
+
+```bash
+ibo setup gmail --client-json ~/Downloads/client_secret_XXXX.json
+```
+
+or set `IBO_GOOGLE_CLIENT_ID` and `IBO_GOOGLE_CLIENT_SECRET`. Note: a client in Google's *Testing* status issues tokens that expire after 7 days; publish it to *In production* (as an internal or unverified app) to avoid that.
 
 ### 3. Discover your projects
 
@@ -111,12 +121,13 @@ inbox-orchestrator uses your own Google OAuth client, so no third party ever hol
 ibo onboard
 ```
 
-The agent collects evidence on your Mac, then asks you short questions with options and a recommendation:
+The agent collects evidence on your Mac, then asks you short questions with options and a recommendation. At the end it asks whether it missed anything: projects in a hosted builder (Base44, for example), on another machine, or that exist only in email can be added by hand.
 
 | Source | What it learns |
 | --- | --- |
 | `~/.claude.json`, `.mcp.json`, Claude Desktop config | Which MCP servers you have configured |
 | `~/.claude/projects` (Claude Code session history) | Which MCP servers you actually used, in which project folder, and when |
+| Git repos under `~/projects`, `~/apps`, `~/code`, `~/dev`, `~/src`, ... (`IBO_SCAN_ROOTS` to change) | Projects you never opened in Claude Code on this Mac |
 | Your MCP servers, read-only listing tools only | Apps, boards and repos that exist there |
 | Git | Last commit, default branch, remote |
 | Gmail, last 90 days, headers only | Which domains and senders write to you, and how often |
@@ -206,7 +217,7 @@ Everything lives in `~/.inbox-orchestrator/` (override with `IBO_HOME`):
 | `api-token` | Token for the local API (mode 0600) |
 | `worktrees/` | Git worktrees created for code tasks |
 
-Secrets (Anthropic key, Google OAuth client and refresh token) are stored in the macOS Keychain under the service name `inbox-orchestrator`.
+Secrets (Anthropic key, Google refresh token, and your own OAuth client if you set one) are stored in the macOS Keychain under the service name `inbox-orchestrator`.
 
 Config edits apply without a restart: the daemon re-reads the files every polling cycle (or immediately on `kill -HUP`).
 

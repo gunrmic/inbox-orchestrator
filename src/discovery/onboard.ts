@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkbox, input, select } from "@inquirer/prompts";
+import { checkbox, confirm, input, select } from "@inquirer/prompts";
 import pc from "picocolors";
 import { loadProjects, loadTools, saveProjects, saveTools } from "../config/load.js";
 import { ensureHome, paths } from "../config/paths.js";
@@ -12,8 +12,10 @@ import { authorizedClient } from "../gmail/auth.js";
 import { GmailSource, PERSONAL_DOMAINS } from "../gmail/client.js";
 import { repoInfo } from "./activity.js";
 import { scanClaudeSessions } from "./claude-sessions.js";
+import { findRepos } from "./repos.js";
 import { discoverMcpServers } from "./mcp-configs.js";
 import { probeServer } from "./probe.js";
+import { slugify } from "../executors/claude-code.js";
 import { proposeDeterministic, proposeWithModel, type Candidate, type Evidence } from "./propose.js";
 
 const RECOMMENDED = pc.green(" (recommended)");
@@ -27,8 +29,19 @@ export async function gatherEvidence(log: (s: string) => void): Promise<{ eviden
   const sessions = await scanClaudeSessions();
   log(`  ${sessions.folders.length} folders, ${sessions.servers.length} MCP servers used`);
 
+  log("Looking for git repos in your code folders (~/projects, ~/apps, ~/code, ...)...");
+  const known = new Set(sessions.folders.map((f) => f.folder));
+  const extra = findRepos().filter((f) => !known.has(f));
+  log(`  ${extra.length} more repos without local Claude Code sessions`);
+
   log("Checking git activity...");
-  const repos = await Promise.all(sessions.folders.slice(0, 40).map((f) => repoInfo(f.folder)));
+  const sessionRepos = await Promise.all(sessions.folders.slice(0, 40).map((f) => repoInfo(f.folder)));
+  const extraRepos = await Promise.all(extra.map((f) => repoInfo(f)));
+  for (const r of extraRepos) {
+    if (r.lastCommit) sessions.folders.push({ folder: r.folder, lastActivity: r.lastCommit, sessions: 0, servers: {} });
+  }
+  sessions.folders.sort((a, b) => Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"));
+  const repos = [...sessionRepos, ...extraRepos];
 
   // Probe only servers that are configured AND were used in the last 180 days.
   const cutoff = new Date(Date.now() - 180 * 86_400_000).toISOString();
@@ -106,11 +119,60 @@ async function reviewCandidate(c: Candidate, assumeYes: boolean): Promise<Projec
   if (choice === "edit") {
     const domains = await input({ message: "Domains (comma separated, e.g. coleven.com):", default: p.match.domains.join(", ") });
     const senders = await input({ message: "Specific senders (comma separated):", default: p.match.senders.join(", ") });
-    const split = (s: string) => s.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
     p.match.domains = split(domains);
     p.match.senders = split(senders);
   }
   return p;
+}
+
+const split = (s: string) => s.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+
+/** A project discovery could not see: lives in a hosted builder, another machine, or only in email. */
+async function askManualProject(ev: Evidence): Promise<Project> {
+  const name = (await input({ message: "Project name:", validate: (v) => !!v.trim() || "Required" })).trim();
+  const where = await select({
+    message: `Where does ${name} live?`,
+    choices: [
+      { name: "A folder on this Mac", value: "folder" },
+      { name: "An app reached through an MCP server (Base44, Linear, ...)", value: "mcp" },
+      { name: "Only email for now (reminders)", value: "email" },
+    ],
+  });
+  const playbook: Project["playbook"] = {};
+  let folder: string | undefined;
+  if (where === "folder") {
+    folder = (await input({ message: "Folder path:" })).trim().replace(/^~/, process.env.HOME ?? "");
+    const repo = await repoInfo(folder);
+    if (repo.isGit) {
+      playbook.reproduce_bug = { kind: "claude-code", repo: folder, baseBranch: repo.defaultBranch ?? "main" };
+      playbook.prepare_fix = { kind: "claude-code", repo: folder, baseBranch: repo.defaultBranch ?? "main" };
+    }
+  } else if (where === "mcp") {
+    const servers = discoverMcpServers().map((s) => s.name);
+    if (servers.length === 0) {
+      console.log(pc.yellow("  No MCP servers are configured in Claude Code or Claude Desktop on this Mac, so tasks will be reminders for now."));
+    } else {
+      const server = await select({ message: "Which MCP server?", choices: servers.map((s) => ({ name: s, value: s })) });
+      const tools = ev.probes.find((p) => p.server === server)?.tools.map((t) => t.name) ?? [];
+      const tool = tools.length
+        ? await select({ message: "Tool to use for new tasks:", choices: tools.map((t) => ({ name: t, value: t })) })
+        : (await input({ message: "Tool name for new tasks:" })).trim();
+      if (tool) playbook.create_task = { kind: "mcp", server, tool };
+    }
+  }
+  playbook.create_reminder ??= { kind: "reminder" };
+  const domains = await input({ message: "Email domains that belong to it (comma separated):" });
+  const senders = await input({ message: "Specific senders (comma separated):" });
+  return {
+    id: slugify(name),
+    name,
+    status: "live",
+    lastActivity: new Date().toISOString(),
+    match: { senders: split(senders), domains: split(domains), keywords: [name.toLowerCase()] },
+    summary: undefined,
+    playbook,
+    autonomy: {},
+  };
 }
 
 /** Interactive onboarding: discover, propose, ask, write config. */
@@ -158,6 +220,12 @@ export async function onboard(models: ModelRouter | null, opts: { assumeYes?: bo
       choices: dead.map((c) => ({ name: `${c.project.name ?? c.project.id} (${c.project.lastActivity?.slice(0, 10) ?? "no date"})`, value: c.project.id })),
     });
     accepted.push(...dead.filter((c) => revive.includes(c.project.id)).map((c) => c.project));
+  }
+
+  if (!assumeYes) {
+    while (await confirm({ message: "Is there a project I missed (for example a Base44 app or a client with no code on this Mac)?", default: false })) {
+      accepted.push(await askManualProject(evidence));
+    }
   }
 
   // Confirm risk levels for every MCP tool that a playbook uses.

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { platform } from "node:os";
-import { OAuth2Client } from "google-auth-library";
+import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
 import { getSecret, setSecret } from "../util/secrets.js";
 
 /** Read-only. The agent never sends or deletes mail through Gmail. */
@@ -25,10 +25,27 @@ export async function saveClientCredentials(json: string): Promise<void> {
   await setSecret("google-oauth-client", JSON.stringify(creds));
 }
 
-async function loadClient(redirectUri?: string): Promise<OAuth2Client> {
+/**
+ * The project's shared Desktop OAuth client, so users only click "Sign in with Google".
+ * For installed apps Google treats this secret as non-confidential (it ships in every
+ * desktop binary); PKCE protects the sign-in. Tokens stay on the user's Mac.
+ */
+export const BUILTIN_CLIENT: ClientCreds = {
+  client_id: "375193829689-6lptfjifqie265810bqgh56jjmms0dnj.apps.googleusercontent.com",
+  client_secret: "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",
+};
+
+/** Precedence: env vars, then a client saved with `ibo setup gmail --client-json`, then the built-in one. */
+export async function clientCredentials(): Promise<ClientCreds & { source: "env" | "saved" | "builtin" }> {
+  const { IBO_GOOGLE_CLIENT_ID: id, IBO_GOOGLE_CLIENT_SECRET: secret } = process.env;
+  if (id && secret) return { client_id: id, client_secret: secret, source: "env" };
   const stored = await getSecret("google-oauth-client");
-  if (!stored) throw new Error("No Google OAuth client. Run `ibo setup gmail` first.");
-  const c = JSON.parse(stored) as ClientCreds;
+  if (stored) return { ...(JSON.parse(stored) as ClientCreds), source: "saved" };
+  return { ...BUILTIN_CLIENT, source: "builtin" };
+}
+
+async function loadClient(redirectUri?: string): Promise<OAuth2Client> {
+  const c = await clientCredentials();
   return new OAuth2Client({ clientId: c.client_id, clientSecret: c.client_secret, redirectUri });
 }
 
@@ -39,7 +56,14 @@ export async function authorizeInteractive(): Promise<void> {
   const port = (server.address() as { port: number }).port;
   const redirectUri = `http://127.0.0.1:${port}/oauth2callback`;
   const client = await loadClient(redirectUri);
-  const url = client.generateAuthUrl({ access_type: "offline", prompt: "consent", scope: GMAIL_SCOPES });
+  const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
+  const url = client.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: GMAIL_SCOPES,
+    code_challenge: codeChallenge,
+    code_challenge_method: CodeChallengeMethod.S256,
+  });
 
   const code = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Timed out waiting for Google sign-in.")), 5 * 60_000);
@@ -57,7 +81,7 @@ export async function authorizeInteractive(): Promise<void> {
   });
   server.close();
 
-  const { tokens } = await client.getToken(code);
+  const { tokens } = await client.getToken({ code, codeVerifier });
   if (!tokens.refresh_token) throw new Error("Google returned no refresh token. Remove the app's access in your Google account and retry.");
   await setSecret("google-refresh-token", tokens.refresh_token);
 }

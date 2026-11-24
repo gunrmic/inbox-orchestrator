@@ -84,13 +84,7 @@ program
       console.log(pc.green("Google OAuth client saved."));
       if (part === "gmail") await authorizeInteractive();
     } else if (ask("gmail")) {
-      console.log(
-        `\nGmail uses your own Google Cloud OAuth client (Desktop app), read-only scope.\nSee README > "Connect Gmail" for the 3-minute setup.`,
-      );
-      if (!(await getSecret("google-oauth-client")) || (await confirm({ message: "Replace the OAuth client?", default: false }))) {
-        const file = await input({ message: "Path to the downloaded client JSON:" });
-        await saveClientCredentials(readFileSync(file.trim().replace(/^~/, process.env.HOME ?? ""), "utf8"));
-      }
+      console.log("\nA browser window will open. Sign in with Google and allow read-only access to Gmail.");
       await authorizeInteractive();
       console.log(pc.green("Gmail connected (read-only)."));
     }

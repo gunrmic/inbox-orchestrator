@@ -13,6 +13,8 @@ for (const key of Object.keys(process.env)) {
 process.env.IBO_SECRETS_BACKEND = "file";
 delete process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_BASE_URL;
+// Discovery scans ~/projects and friends for git repos; never the real home folder in tests.
+process.env.IBO_SCAN_ROOTS = join(tmpdir(), "ibo-test-no-scan-roots");
 
 beforeEach(() => {
   process.env.IBO_HOME = mkdtempSync(join(tmpdir(), "ibo-test-"));

@@ -57,7 +57,9 @@ export function proposeDeterministic(ev: Evidence, now = Date.now()): Candidate[
         autonomy: {},
       },
       evidence: [
-        `Folder ${f.folder}, ${f.sessions} Claude Code sessions, last ${f.lastActivity}`,
+        f.sessions > 0
+          ? `Folder ${f.folder}, ${f.sessions} Claude Code sessions, last ${f.lastActivity}`
+          : `Folder ${f.folder}, found by scanning for git repos`,
         ...(repo?.isGit ? [`git repo, last commit ${repo.lastCommit}, remote ${repo.remote ?? "none"}`] : []),
         ...(servers.length ? [`MCP used here: ${servers.join(", ")}`] : []),
       ],
