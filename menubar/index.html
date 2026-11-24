@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Inbox Orchestrator</title>
+  </head>
+  <body>
+    <header>
+      <strong>Inbox Orchestrator</strong>
+      <label class="kill"><input type="checkbox" id="kill" /> Kill switch</label>
+    </header>
+    <div id="banner" class="banner" hidden></div>
+    <main id="cards"></main>
+    <footer id="footer"></footer>
+    <template id="card">
+      <article class="card">
+        <div class="meta"><span class="risk"></span><span class="project"></span></div>
+        <h3 class="summary"></h3>
+        <p class="email"></p>
+        <p class="reason"></p>
+        <details class="args-wrap"><summary>Edit details</summary><textarea class="args" rows="6"></textarea></details>
+        <div class="buttons">
+          <button class="approve">Do it</button>
+          <button class="edit">Save edits and do it</button>
+          <button class="reject">Dismiss</button>
+        </div>
+      </article>
+    </template>
+    <script src="renderer.js"></script>
+  </body>
+</html>

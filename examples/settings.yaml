@@ -1,0 +1,30 @@
+# Defaults. Copy to ~/.inbox-orchestrator/settings.yaml and edit.
+mode: suggest
+killSwitch: false
+gmail:
+  pollSeconds: 60
+  query: in:inbox -category:promotions -category:social
+models:
+  filter:
+    provider: ollama
+    model: qwen3:8b
+  route:
+    provider: ollama
+    model: qwen3:8b
+  plan:
+    provider: anthropic
+    model: claude-sonnet-5-5
+  discovery:
+    provider: anthropic
+    model: claude-sonnet-5-5
+  fallback:
+    provider: anthropic
+    model: claude-haiku-5-5
+  ollamaUrl: http://127.0.0.1:11434
+  minLocalConfidence: 0.7
+org:
+  allowLocalModels: true
+promotion:
+  threshold: 10
+server:
+  port: 47811

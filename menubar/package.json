@@ -1,0 +1,30 @@
+{
+  "name": "inbox-orchestrator-menubar",
+  "productName": "Inbox Orchestrator",
+  "version": "0.1.0",
+  "description": "Menu bar companion for inbox-orchestrator: approve, edit or reject prepared actions.",
+  "main": "main.js",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg"
+  },
+  "dependencies": {
+    "menubar": "^9.5.3"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "dev.omermichaeli.inbox-orchestrator.menubar",
+    "productName": "Inbox Orchestrator",
+    "files": ["main.js", "preload.js", "index.html", "renderer.js", "styles.css", "assets/**"],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"],
+      "extendInfo": { "LSUIElement": true }
+    }
+  }
+}

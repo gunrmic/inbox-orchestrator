@@ -1,0 +1,57 @@
+{
+  "name": "inbox-orchestrator",
+  "version": "0.1.0",
+  "description": "A local agent for macOS that sits beside your inbox, figures out what each email asks for, and prepares or performs the work with your own MCP tools and Claude Code.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Omer Michaeli (https://omermichaeli.dev)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gunrmic/inbox-orchestrator.git"
+  },
+  "bin": {
+    "ibo": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js start",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "@inquirer/prompts": "^8.8.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "better-sqlite3": "^13.2.0",
+    "commander": "^15.1.0",
+    "fastify": "^5.12.8",
+    "google-auth-library": "^11.3.4",
+    "googleapis": "^190.0.0",
+    "picocolors": "^1.1.1",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}

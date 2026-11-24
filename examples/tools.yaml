@@ -1,0 +1,8 @@
+# Risk level per MCP tool, confirmed during `ibo onboard`.
+# 0 read · 1 local and reversible · 2 visible to others · 3 dangerous
+# Tools missing here are level 3. Names like publish/deploy/merge/delete/send are always 3.
+tools:
+  base44/query_entities: 0
+  base44/create_checkpoint: 1
+  google-calendar/create_event: 2
+  jira/create_issue: 2

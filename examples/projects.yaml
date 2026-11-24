@@ -1,0 +1,29 @@
+# Normally written by `ibo onboard`. Two projects on different stacks, as an example.
+projects:
+  # A client app built on Base44. No git, no ticket system.
+  - id: hawk-graph
+    name: Hawk Graph
+    status: live
+    match:
+      senders: [client@example-client.com]
+      domains: [example-client.com]
+      keywords: [Hawk Graph]
+    summary: projects/hawk-graph.md
+    playbook:
+      reproduce_bug: { kind: mcp, server: base44, tool: query_entities }
+      prepare_fix: { kind: mcp, server: base44, tool: create_checkpoint }
+      schedule_meeting: { kind: mcp, server: google-calendar, tool: create_event }
+    autonomy:
+      schedule_meeting: suggest
+
+  # A classic git + Jira project. Code tasks run in Claude Code on a fresh worktree.
+  - id: acme-api
+    name: ACME API
+    status: dormant
+    match:
+      domains: [acme.io]
+    summary: projects/acme-api.md
+    playbook:
+      reproduce_bug: { kind: claude-code, repo: ~/code/acme-api, baseBranch: main }
+      prepare_fix: { kind: claude-code, repo: ~/code/acme-api, baseBranch: main }
+      create_task: { kind: mcp, server: jira, tool: create_issue }
