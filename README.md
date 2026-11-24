@@ -1,5 +1,7 @@
 # inbox-orchestrator
 
+**[⬇ Download for Mac](https://github.com/gunrmic/inbox-orchestrator/releases/latest/download/Inbox-Orchestrator.dmg)** (Apple Silicon and Intel) · or install from the terminal, see [Install](#install)
+
 A local agent for macOS that sits beside your inbox. It reads each incoming email, works out what work the email asks for, and prepares that work with the tools you already use: your MCP servers, Claude Code, your calendar, your reminders. Things that are safe and reversible happen on their own. Everything else waits for one click in the menu bar.
 
 It is not an email client. You keep reading and writing mail in Gmail. inbox-orchestrator gives you an **action inbox** next to it.
@@ -69,7 +71,7 @@ npm link           # makes `ibo` available
 
 ### Menu bar app (.dmg, no terminal)
 
-Download the `.dmg` from [Releases](https://github.com/gunrmic/inbox-orchestrator/releases). The daemon and CLI ship inside the app and run on its built-in Node, so you do not need Node, git or a terminal. On first launch a setup window walks you through it, no terminal: sign in with Google, Claude (your Claude Code login is picked up automatically), a one-click local model download with a progress bar, and your projects as cards you check or uncheck, with the email domains for each. After that the app lives in the menu bar, starts at login, and runs the daemon itself.
+[Download the .dmg](https://github.com/gunrmic/inbox-orchestrator/releases/latest/download/Inbox-Orchestrator.dmg). The link always points to the latest release. The daemon and CLI ship inside the app and run on its built-in Node, so you do not need Node, git or a terminal. On first launch a setup window walks you through it, no terminal: sign in with Google, Claude (your Claude Code login is picked up automatically), a one-click local model download with a progress bar, and your projects as cards you check or uncheck, with the email domains for each. After that the app lives in the menu bar, starts at login, and runs the daemon itself.
 
 Notifications come with **Do it** and **Dismiss** buttons for levels 0 to 2, so most cards never need the window. Level 3 and "which project?" questions open it.
 
@@ -78,10 +80,10 @@ Build it yourself:
 ```bash
 npm ci && npm run build
 cd menubar && npm ci
-npm run dist       # build/dist/Inbox Orchestrator-<version>.dmg
+npm run dist       # build/dist/Inbox-Orchestrator.dmg (universal: Apple Silicon and Intel)
 ```
 
-Until the app is signed and notarized, the first time you open it, right-click it and choose **Open**. The release workflow signs and notarizes automatically when the Apple secrets are set (see `.github/workflows/release.yml`). You can use everything from the terminal too (`ibo pending`, `ibo approve <id>`).
+Until the app is signed and notarized, macOS blocks it the first time: open **System Settings > Privacy & Security** and click **Open Anyway**. The release workflow signs and notarizes automatically when the Apple secrets are set (see `.github/workflows/release.yml`). You can use everything from the terminal too (`ibo pending`, `ibo approve <id>`).
 
 ## Setup
 

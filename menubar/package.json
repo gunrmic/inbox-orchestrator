@@ -39,8 +39,7 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64",
-            "x64"
+            "universal"
           ]
         }
       ],
@@ -58,10 +57,12 @@
       }
     ],
     "dmg": {
-      "title": "Inbox Orchestrator"
+      "title": "Inbox Orchestrator",
+      "artifactName": "Inbox-Orchestrator.${ext}"
     },
     "directories": {
       "output": "../build/dist"
     }
-  }
+  },
+  "author": "Omer Michaeli"
 }
