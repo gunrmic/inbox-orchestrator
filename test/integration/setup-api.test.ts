@@ -55,7 +55,8 @@ beforeEach(() => {
   const sessions = join(home, ".claude", "projects", "-code-hawk");
   mkdirSync(sessions, { recursive: true });
   writeFileSync(join(sessions, "s.jsonl"), JSON.stringify({ cwd: folder, timestamp: new Date().toISOString(), message: { content: [{ type: "tool_use", name: "mcp__apps__create_ticket" }] } }));
-  saveSettings(Settings.parse({}));
+  // A closed port, so a Mac that really runs Ollama (a developer's, a self-hosted runner) does not change the result.
+  saveSettings(Settings.parse({ models: { ollamaUrl: "http://127.0.0.1:9" } }));
   saveProjects({ projects: [] });
   rt = buildRuntime(() => {});
   app = buildApi(rt);
