@@ -61,13 +61,14 @@ jobs:
             WORK="$RUNNER_TEMP/signing"; mkdir -p "$WORK"; chmod 700 "$WORK"
             trap 'rm -rf "$WORK"' EXIT
             curl -fsSL -o "$WORK/g2.cer" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
-            openssl x509 -inform DER -in "$WORK/g2.cer" -out "$WORK/g2.pem"
-            openssl x509 -in "$WORK/g2.pem" -noout -subject | grep -q "Developer ID Certification Authority"
+            # The system's LibreSSL writes a PKCS#12 that macOS `security` can read (OpenSSL 3 from Homebrew does not).
+            OSSL=/usr/bin/openssl
+            $OSSL x509 -inform DER -in "$WORK/g2.cer" -out "$WORK/g2.pem"
+            $OSSL x509 -in "$WORK/g2.pem" -noout -subject | grep -q "Developer ID Certification Authority"
             printf '%s' "$SECRET_CSC_LINK" | base64 --decode > "$WORK/in.p12"
             export P12PASS="$SECRET_CSC_KEY_PASSWORD"
-            openssl pkcs12 -in "$WORK/in.p12" -passin env:P12PASS -nodes -out "$WORK/all.pem" 2>/dev/null \
-              || openssl pkcs12 -legacy -in "$WORK/in.p12" -passin env:P12PASS -nodes -out "$WORK/all.pem"
-            openssl pkcs12 -export -in "$WORK/all.pem" -certfile "$WORK/g2.pem" -passout env:P12PASS -out "$WORK/chain.p12"
+            $OSSL pkcs12 -in "$WORK/in.p12" -passin env:P12PASS -nodes -out "$WORK/all.pem"
+            $OSSL pkcs12 -export -in "$WORK/all.pem" -certfile "$WORK/g2.pem" -passout env:P12PASS -out "$WORK/chain.p12"
             rm -f "$WORK/all.pem" "$WORK/in.p12"
             export CSC_LINK="$WORK/chain.p12" CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
             # Notarize only when the app-specific password is there; otherwise sign without it.
