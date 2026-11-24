@@ -24,6 +24,9 @@ permissions:
 jobs:
   dmg:
     name: Test on macOS and build the .dmg
+    # A new Apple account's first notarizations can be held for a day or two; the default
+    # 6-hour job limit would cut the wait short. (Self-hosted runners allow up to 5 days.)
+    timeout-minutes: 2880
     # Your own Mac when the MAC_RUNNER repository variable names its label (no queue), else GitHub's.
     runs-on: ${{ vars.MAC_RUNNER || 'macos-latest' }}
     steps:
