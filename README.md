@@ -121,13 +121,25 @@ or set `IBO_GOOGLE_CLIENT_ID` and `IBO_GOOGLE_CLIENT_SECRET`. Note: a client in 
 ibo onboard
 ```
 
-The agent collects evidence on your Mac, then asks you short questions with options and a recommendation. At the end it asks whether it missed anything: projects in a hosted builder (Base44, for example), on another machine, or that exist only in email can be added by hand.
+Chats in claude.ai, ChatGPT and Gemini are stored on their servers, not on your Mac, so they are only read if you export them: claude.ai **Settings > Privacy > Export data**, or ChatGPT **Settings > Data controls > Export data**. Then:
+
+```bash
+ibo onboard --import ~/Downloads/data-2026-11-24.zip
+```
+
+Only project names, descriptions, chat titles and dates are read. Message contents are not.
+
+The agent collects evidence on your Mac, then asks you short questions with options and a recommendation. Signals that share a name are joined: a folder `coleven-capture`, mail from `coleven.com` and a Claude Project "Coleven" become one project. At the end it asks whether it missed anything: projects in a hosted builder (Base44, for example), on another machine, or that exist only in email can be added by hand.
 
 | Source | What it learns |
 | --- | --- |
 | `~/.claude.json`, `.mcp.json`, Claude Desktop config | Which MCP servers you have configured |
 | `~/.claude/projects` (Claude Code session history) | Which MCP servers you actually used, in which project folder, and when |
-| Git repos under `~/projects`, `~/apps`, `~/code`, `~/dev`, `~/src`, ... (`IBO_SCAN_ROOTS` to change) | Projects you never opened in Claude Code on this Mac |
+| `~/.codex/sessions` (Codex CLI) | Folders you worked in with Codex |
+| Cursor, VS Code and Windsurf workspace history | Folders you opened in an editor |
+| Git repos under `~/projects`, `~/apps`, `~/code`, `~/dev`, `~/src`, ... (`IBO_SCAN_ROOTS` to change) | Projects you never opened in any of those tools |
+| Newest file change in each folder (ignoring `node_modules`, build output) | Whether work is happening even without commits. Folders found only by an editor or the scan are dropped after 180 days with no changes |
+| A Claude or ChatGPT data export, if you pass one with `--import` | Your Claude Projects and recent chat titles, for projects with no code on this Mac |
 | Your MCP servers, read-only listing tools only | Apps, boards and repos that exist there |
 | Git | Last commit, default branch, remote |
 | Gmail, last 90 days, headers only | Which domains and senders write to you, and how often |

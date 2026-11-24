@@ -9,6 +9,10 @@ export interface FolderUsage {
   sessions: number;
   /** MCP server name -> number of tool calls in this folder. */
   servers: Record<string, number>;
+  /** Where the folder was seen: Claude Code, Codex, Cursor, VS Code, git scan. */
+  via?: string[];
+  /** Newest file modification in the folder (ignoring dependencies and build output). */
+  lastFileChange?: string | null;
 }
 
 export interface ServerUsage {

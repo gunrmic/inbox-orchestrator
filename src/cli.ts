@@ -133,9 +133,10 @@ program
   .description("Discover your projects and tools, answer a few questions, write the config.")
   .option("--no-model", "Propose projects from folders only, without calling a model")
   .option("-y, --yes", "Accept every recommendation without asking (for scripts)")
-  .action(async (opts: { model: boolean; yes?: boolean }) => {
+  .option("--import <files...>", "Claude or ChatGPT data export (.zip, folder or conversations.json) to learn project names from")
+  .action(async (opts: { model: boolean; yes?: boolean; import?: string[] }) => {
     const models = opts.model && (await anthropicKey()) ? buildModels(loadSettings()) : null;
-    await onboard(models, { assumeYes: !!opts.yes });
+    await onboard(models, { assumeYes: !!opts.yes, imports: opts.import ?? [] });
   });
 
 program

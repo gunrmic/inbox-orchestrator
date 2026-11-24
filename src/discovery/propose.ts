@@ -5,6 +5,7 @@ import type { Project } from "../config/schema.js";
 import type { ModelRouter } from "../models/router.js";
 import { newest, statusFrom, type RepoInfo } from "./activity.js";
 import type { SessionScan } from "./claude-sessions.js";
+import type { AssistantExport } from "./exports.js";
 import type { ServerProbe } from "./probe.js";
 import { slugify } from "../executors/claude-code.js";
 
@@ -13,6 +14,30 @@ export interface Evidence {
   repos: RepoInfo[];
   probes: ServerProbe[];
   senders: { domain: string; count: number; senders: string[]; last: string }[];
+  /** Claude / ChatGPT data exports the user pointed us at. */
+  assistants?: AssistantExport[];
+}
+
+/** Lowercase name tokens of 4+ letters: "coleven-capture" -> coleven, capture; "coleven.com" -> coleven. */
+export function nameTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/\.(com|io|ai|co|dev|app|net|org|il|co\.il)$/g, "")
+    .split(/[^a-z0-9\u0590-\u05ff]+/)
+    .filter((t) => t.length >= 4 && !["www", "mail", "app", "apps", "source", "main"].includes(t));
+}
+
+const sharesToken = (a: string, b: string) => {
+  const tb = new Set(nameTokens(b));
+  return nameTokens(a).some((t) => tb.has(t));
+};
+
+/** The part of a sender domain that names the organisation: mail.coleven.co.il -> coleven. */
+export function orgOfDomain(domain: string): string {
+  const parts = domain.toLowerCase().split(".");
+  const tail = parts.slice(-2).join(".");
+  const cut = ["co.il", "co.uk", "com.au", "org.il", "ac.il"].includes(tail) ? 3 : 2;
+  return parts.slice(-cut)[0] ?? domain;
 }
 
 export interface Candidate {
@@ -34,9 +59,13 @@ function readDoc(folder: string): string {
 
 /** Without a model: one candidate per recently active folder, playbook from what we can see. */
 export function proposeDeterministic(ev: Evidence, now = Date.now()): Candidate[] {
+  return linkByName(folderCandidates(ev, now), ev, now);
+}
+
+function folderCandidates(ev: Evidence, now: number): Candidate[] {
   return ev.sessions.folders.slice(0, 25).map((f) => {
     const repo = ev.repos.find((r) => r.folder === f.folder);
-    const last = newest(f.lastActivity, repo?.lastCommit);
+    const last = newest(f.lastActivity, repo?.lastCommit, f.lastFileChange);
     const status = statusFrom(last, now);
     const playbook: Project["playbook"] = {};
     if (repo?.isGit) {
@@ -57,9 +86,10 @@ export function proposeDeterministic(ev: Evidence, now = Date.now()): Candidate[
         autonomy: {},
       },
       evidence: [
-        f.sessions > 0
-          ? `Folder ${f.folder}, ${f.sessions} Claude Code sessions, last ${f.lastActivity}`
-          : `Folder ${f.folder}, found by scanning for git repos`,
+        f.via?.length && !(f.via.length === 1 && f.via[0] === "Claude Code")
+          ? `Folder ${f.folder}, seen in ${f.via.join(", ")}, last ${f.lastActivity}`
+          : `Folder ${f.folder}, ${f.sessions} Claude Code sessions, last ${f.lastActivity}`,
+        ...(f.lastFileChange ? [`Files last changed ${f.lastFileChange.slice(0, 10)}`] : []),
         ...(repo?.isGit ? [`git repo, last commit ${repo.lastCommit}, remote ${repo.remote ?? "none"}`] : []),
         ...(servers.length ? [`MCP used here: ${servers.join(", ")}`] : []),
       ],
@@ -67,6 +97,86 @@ export function proposeDeterministic(ev: Evidence, now = Date.now()): Candidate[
       summary: readDoc(f.folder).slice(0, 1500),
     };
   });
+}
+
+/**
+ * Joins signals that name the same thing: a folder "coleven-capture", a sender domain coleven.com
+ * and a Claude Project "Coleven" become one project. Leftover business domains and assistant
+ * projects become their own candidates, since many projects have no code on this Mac.
+ */
+export function linkByName(cands: Candidate[], ev: Evidence, now = Date.now()): Candidate[] {
+  const out = [...cands];
+  const find = (name: string) => out.find((c) => sharesToken(c.project.name ?? c.project.id, name) || c.project.match.keywords.some((k) => sharesToken(k, name)));
+  const bump = (c: Candidate, date: string | undefined) => {
+    const last = newest(c.project.lastActivity, date);
+    c.project.lastActivity = last ?? undefined;
+    c.project.status = statusFrom(last, now);
+  };
+
+  for (const a of ev.assistants ?? []) {
+    for (const p of a.projects) {
+      const hit = find(p.name);
+      if (hit) {
+        hit.evidence.push(`${a.source} Project "${p.name}", updated ${p.lastActivity.slice(0, 10)}`);
+        hit.confidence = Math.min(1, hit.confidence + 0.2);
+        bump(hit, p.lastActivity);
+        continue;
+      }
+      const chats = a.titles.filter((t) => sharesToken(t.title, p.name));
+      const last = newest(p.lastActivity, chats[0]?.lastActivity);
+      out.push({
+        project: {
+          id: slugify(p.name),
+          name: p.name,
+          status: statusFrom(last, now),
+          lastActivity: last ?? undefined,
+          match: { senders: [], domains: [], keywords: [p.name.toLowerCase()] },
+          summary: undefined,
+          playbook: { create_reminder: { kind: "reminder" } },
+          autonomy: {},
+        },
+        evidence: [`${a.source} Project "${p.name}"${chats.length ? `, ${chats.length} related chats` : ""}, last ${last?.slice(0, 10) ?? "unknown"}`],
+        confidence: 0.6,
+        summary: p.description,
+      });
+    }
+  }
+
+  for (const d of ev.senders) {
+    const org = orgOfDomain(d.domain);
+    const hit = find(org);
+    if (hit) {
+      if (!hit.project.match.domains.includes(d.domain)) hit.project.match.domains.push(d.domain);
+      hit.evidence.push(`Email from ${d.domain}: ${d.count} messages in 90 days, last ${d.last.slice(0, 10)}`);
+      bump(hit, d.last);
+      continue;
+    }
+    if (d.count < 5) continue;
+    out.push({
+      project: {
+        id: slugify(org),
+        name: org,
+        status: statusFrom(d.last, now),
+        lastActivity: d.last,
+        match: { senders: [], domains: [d.domain], keywords: [org] },
+        summary: undefined,
+        playbook: { create_reminder: { kind: "reminder" } },
+        autonomy: {},
+      },
+      evidence: [`Email from ${d.domain}: ${d.count} messages in 90 days (${d.senders.slice(0, 3).join(", ")}), last ${d.last.slice(0, 10)}`],
+      confidence: 0.4,
+      summary: "",
+      question: {
+        text: `${d.domain} writes to you often. What is it?`,
+        options: [
+          { label: "A client or project of mine", reason: "Mail from them becomes tasks and reminders." },
+          { label: "A vendor or service I use", reason: "Only clear action items become reminders." },
+          { label: "Not relevant", reason: "Skip it." },
+        ],
+      },
+    });
+  }
+  return out;
 }
 
 const StepOut = z.object({
@@ -154,8 +264,11 @@ const PROPOSAL_SCHEMA = {
 };
 
 const DISCOVERY_SYSTEM = `You map a developer's real projects from evidence collected on their Mac.
-Evidence: Claude Code session folders (which MCP servers were used where, and when), git repos,
-read-only listings from their MCP servers (apps, boards, repos), and email sender domains with counts.
+Evidence: code folders seen in Claude Code, Codex, Cursor or VS Code or found as git repos (with the newest
+file change), which MCP servers were used where, read-only listings from their MCP servers (apps, boards, repos),
+email sender domains with counts, and project names and chat titles from Claude or ChatGPT data exports.
+Many projects have no code on this Mac (hosted builders like Base44, client work done in chats): propose
+them too when an assistant project, chat titles or an email domain points at them.
 Group signals that belong to the same project: an email domain, a code folder or an app on some platform,
 and the MCP servers used for it. Every project can use a different stack. Do not assume any tool.
 For each project, choose executors only from MCP servers and tools that appear in the evidence.
@@ -179,6 +292,8 @@ export async function proposeWithModel(models: ModelRouter, ev: Evidence, now = 
       samples: p.samples,
     })),
     emailDomains: ev.senders.slice(0, 40),
+    assistantProjects: (ev.assistants ?? []).flatMap((a) => a.projects.map((p) => ({ source: a.source, ...p }))),
+    recentChatTitles: (ev.assistants ?? []).flatMap((a) => a.titles.slice(0, 150).map((t) => ({ source: a.source, ...t }))),
   };
   const res = await models.call(
     "discovery",
@@ -201,7 +316,8 @@ export async function proposeWithModel(models: ModelRouter, ev: Evidence, now = 
         playbook[action] = { kind: "claude-code", repo: (step.repo ?? p.folder)!, baseBranch: step.baseBranch ?? "main" };
     }
     const repo = p.folder ? ev.repos.find((r) => r.folder === p.folder) : undefined;
-    const last = newest(p.lastActivity, repo?.lastCommit, ev.sessions.folders.find((f) => f.folder === p.folder)?.lastActivity);
+    const f = ev.sessions.folders.find((x) => x.folder === p.folder);
+    const last = newest(p.lastActivity, repo?.lastCommit, f?.lastActivity, f?.lastFileChange);
     return {
       project: {
         id: slugify(p.id),

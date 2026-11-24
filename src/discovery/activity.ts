@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ProjectStatus } from "../config/schema.js";
 
@@ -60,4 +60,41 @@ export async function repoInfo(folder: string): Promise<RepoInfo> {
     /* no remote */
   }
   return info;
+}
+
+const IGNORE = new Set(["node_modules", ".git", ".next", "dist", "build", "out", "coverage", ".turbo", ".cache", "vendor", "target", ".venv", "__pycache__"]);
+
+/**
+ * Newest modification time of a file in the folder, ignoring build output and dependencies.
+ * Catches work that was never committed. Stops after `budget` entries to stay fast on big trees.
+ */
+export function lastFileChange(folder: string, budget = 4000): string | null {
+  let newestMs = 0;
+  let seen = 0;
+  const walk = (dir: string, depth: number) => {
+    if (depth > 6 || seen > budget) return;
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (seen++ > budget) return;
+      if (IGNORE.has(name) || name === ".DS_Store") continue;
+      const full = join(dir, name);
+      let st;
+      try {
+        st = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (st.isSymbolicLink()) continue;
+      if (st.isDirectory()) walk(full, depth + 1);
+      else if (st.mtimeMs > newestMs) newestMs = st.mtimeMs;
+    }
+  };
+  if (!existsSync(folder)) return null;
+  walk(folder, 0);
+  return newestMs ? new Date(newestMs).toISOString() : null;
 }

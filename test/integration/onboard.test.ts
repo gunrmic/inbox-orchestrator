@@ -6,9 +6,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Answer every interactive prompt like a user who takes the recommended option.
-const answers = { select: [] as unknown[], input: [] as string[], checkbox: [] as unknown[][] };
+const answers = { select: [] as unknown[], input: [] as string[], checkbox: [] as unknown[][], byMessage: {} as Record<string, unknown> };
 vi.mock("@inquirer/prompts", () => ({
-  select: vi.fn(async ({ choices }: { choices: { value: unknown }[] }) => (answers.select.length ? answers.select.shift() : choices[0].value)),
+  select: vi.fn(async ({ message, choices }: { message: string; choices: { value: unknown }[] }) => {
+    if (message in answers.byMessage) return answers.byMessage[message];
+    return answers.select.length ? answers.select.shift() : choices[0].value;
+  }),
   input: vi.fn(async ({ default: d }: { default?: string }) => answers.input.shift() ?? d ?? ""),
   checkbox: vi.fn(async () => answers.checkbox.shift() ?? []),
   confirm: vi.fn(async () => false),
@@ -52,6 +55,7 @@ beforeEach(() => {
   answers.select = [];
   answers.input = [];
   answers.checkbox = [];
+  answers.byMessage = {};
 });
 
 afterEach(() => {
@@ -117,5 +121,36 @@ describe("onboarding end to end (real files, real MCP server, scripted answers)"
     vi.spyOn(console, "log").mockImplementation(() => {});
     await onboard(null);
     expect(loadProjects().projects.map((p) => p.id)).toEqual(["existing"]);
+  });
+
+  it("finds projects with no Claude Code history: Cursor folders, Claude Projects, and ones you add by hand", async () => {
+    const { pathToFileURL } = await import("node:url");
+    const { confirm } = await import("@inquirer/prompts");
+    // A folder only Cursor knows about, with a recent file change.
+    const capture = join(home, "projects", "coleven-capture");
+    mkdirSync(capture, { recursive: true });
+    writeFileSync(join(capture, "index.ts"), "x");
+    const ws = join(home, "Library", "Application Support", "Cursor", "User", "workspaceStorage", "h1");
+    mkdirSync(ws, { recursive: true });
+    writeFileSync(join(ws, "workspace.json"), JSON.stringify({ folder: pathToFileURL(capture).href }));
+    // A Claude data export with a project that has no code on this Mac.
+    const exp = join(home, "claude-export");
+    mkdirSync(exp);
+    writeFileSync(join(exp, "projects.json"), JSON.stringify([{ name: "Shamir", description: "Decisions bot", updated_at: new Date().toISOString() }]));
+    writeFileSync(join(exp, "conversations.json"), "[]");
+
+    // hawk: skip. coleven-capture: add with domain. Shamir: add as proposed. Then add Base44 app by hand.
+    answers.byMessage = { "Add hawk?": "skip", "Add coleven-capture?": "edit", "Add Shamir?": "add", "Where does ColEven Hawk live?": "email" };
+    answers.input = ["coleven.com", "", "ColEven Hawk", "coleven.com", ""];
+    vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await onboard(null, { imports: [exp] });
+
+    const byId = Object.fromEntries(loadProjects().projects.map((p) => [p.id, p]));
+    expect(Object.keys(byId).sort()).toEqual(["coleven-capture", "coleven-hawk", "shamir"]);
+    expect(byId["coleven-capture"].status).toBe("live");
+    expect(byId["coleven-capture"].match.domains).toEqual(["coleven.com"]);
+    expect(byId["shamir"].summary).toBe("projects/shamir.md");
+    expect(byId["coleven-hawk"].playbook.create_reminder).toEqual({ kind: "reminder" });
   });
 });

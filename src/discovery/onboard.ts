@@ -10,7 +10,9 @@ import type { ModelRouter } from "../models/router.js";
 import { suggestRisk } from "../policy/risk.js";
 import { authorizedClient } from "../gmail/auth.js";
 import { GmailSource, PERSONAL_DOMAINS } from "../gmail/client.js";
-import { repoInfo } from "./activity.js";
+import { lastFileChange, newest, repoInfo } from "./activity.js";
+import { scanCodexSessions, scanEditorWorkspaces } from "./editors.js";
+import { readAssistantExport, type AssistantExport } from "./exports.js";
 import { scanClaudeSessions } from "./claude-sessions.js";
 import { findRepos } from "./repos.js";
 import { discoverMcpServers } from "./mcp-configs.js";
@@ -20,7 +22,7 @@ import { proposeDeterministic, proposeWithModel, type Candidate, type Evidence }
 
 const RECOMMENDED = pc.green(" (recommended)");
 
-export async function gatherEvidence(log: (s: string) => void): Promise<{ evidence: Evidence; hub: McpHub }> {
+export async function gatherEvidence(log: (s: string) => void, imports: string[] = []): Promise<{ evidence: Evidence; hub: McpHub }> {
   log("Reading MCP server configs (Claude Code, Claude Desktop)...");
   const servers = discoverMcpServers();
   log(`  ${servers.length} servers configured`);
@@ -29,19 +31,55 @@ export async function gatherEvidence(log: (s: string) => void): Promise<{ eviden
   const sessions = await scanClaudeSessions();
   log(`  ${sessions.folders.length} folders, ${sessions.servers.length} MCP servers used`);
 
-  log("Looking for git repos in your code folders (~/projects, ~/apps, ~/code, ...)...");
-  const known = new Set(sessions.folders.map((f) => f.folder));
-  const extra = findRepos().filter((f) => !known.has(f));
-  log(`  ${extra.length} more repos without local Claude Code sessions`);
+  for (const f of sessions.folders) f.via = ["Claude Code"];
+  const byFolder = new Map(sessions.folders.map((f) => [f.folder, f]));
+  const add = (folder: string, lastActivity: string, via: string, count = 0) => {
+    const f = byFolder.get(folder);
+    if (f) {
+      if (!f.via?.includes(via)) f.via = [...(f.via ?? []), via];
+      if (lastActivity > f.lastActivity) f.lastActivity = lastActivity;
+      return;
+    }
+    const nf = { folder, lastActivity, sessions: count, servers: {}, via: [via] };
+    byFolder.set(folder, nf);
+    sessions.folders.push(nf);
+  };
 
-  log("Checking git activity...");
-  const sessionRepos = await Promise.all(sessions.folders.slice(0, 40).map((f) => repoInfo(f.folder)));
-  const extraRepos = await Promise.all(extra.map((f) => repoInfo(f)));
-  for (const r of extraRepos) {
-    if (r.lastCommit) sessions.folders.push({ folder: r.folder, lastActivity: r.lastCommit, sessions: 0, servers: {} });
+  log("Reading Codex sessions and Cursor / VS Code / Windsurf workspaces...");
+  const codex = await scanCodexSessions();
+  const editors = scanEditorWorkspaces();
+  for (const t of [...codex, ...editors]) add(t.folder, t.lastActivity, t.via, t.sessions);
+  log(`  ${codex.length} Codex folders, ${editors.length} editor folders`);
+
+  log("Looking for git repos in your code folders (~/projects, ~/apps, ~/code, ...)...");
+  const scanned = findRepos().filter((f) => !byFolder.has(f));
+  for (const f of scanned) add(f, "", "git scan");
+  log(`  ${scanned.length} more repos`);
+
+  log("Checking git activity and when files last changed...");
+  const repos = await Promise.all(sessions.folders.map((f) => repoInfo(f.folder)));
+  const cutoffIso = new Date(Date.now() - 180 * 86_400_000).toISOString();
+  sessions.folders = sessions.folders.filter((f) => {
+    f.lastFileChange = lastFileChange(f.folder);
+    const repo = repos.find((r) => r.folder === f.folder);
+    const last = newest(f.lastActivity, repo?.lastCommit, f.lastFileChange) ?? "";
+    if (!f.lastActivity) f.lastActivity = newest(repo?.lastCommit, f.lastFileChange) ?? "";
+    // Folders that only an editor or a scan knows about count only if something changed recently.
+    return f.via?.includes("Claude Code") || last >= cutoffIso;
+  });
+  sessions.folders.sort((a, b) => (newest(b.lastActivity, b.lastFileChange) ?? "").localeCompare(newest(a.lastActivity, a.lastFileChange) ?? ""));
+  log(`  ${sessions.folders.length} folders with recent activity`);
+
+  const assistants: AssistantExport[] = [];
+  for (const file of imports) {
+    try {
+      const a = readAssistantExport(file.replace(/^~/, process.env.HOME ?? ""));
+      assistants.push(a);
+      log(`  ${a.source} export: ${a.projects.length} projects, ${a.titles.length} chats`);
+    } catch (err) {
+      log(pc.yellow(`  ${file}: ${err instanceof Error ? err.message : err}`));
+    }
   }
-  sessions.folders.sort((a, b) => Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"));
-  const repos = [...sessionRepos, ...extraRepos];
 
   // Probe only servers that are configured AND were used in the last 180 days.
   const cutoff = new Date(Date.now() - 180 * 86_400_000).toISOString();
@@ -66,7 +104,7 @@ export async function gatherEvidence(log: (s: string) => void): Promise<{ eviden
     log(pc.yellow(`  skipped: ${err instanceof Error ? err.message : err}`));
   }
 
-  return { evidence: { sessions, repos, probes, senders }, hub };
+  return { evidence: { sessions, repos, probes, senders, assistants }, hub };
 }
 
 function toolRiskFor(ev: Evidence, server: string, tool: string): RiskLevel {
@@ -176,11 +214,11 @@ async function askManualProject(ev: Evidence): Promise<Project> {
 }
 
 /** Interactive onboarding: discover, propose, ask, write config. */
-export async function onboard(models: ModelRouter | null, opts: { assumeYes?: boolean } = {}): Promise<void> {
+export async function onboard(models: ModelRouter | null, opts: { assumeYes?: boolean; imports?: string[] } = {}): Promise<void> {
   const assumeYes = !!opts.assumeYes;
   ensureHome();
   const log = (s: string) => console.log(s);
-  const { evidence, hub } = await gatherEvidence(log);
+  const { evidence, hub } = await gatherEvidence(log, opts.imports ?? []);
 
   let candidates: Candidate[];
   if (models) {
