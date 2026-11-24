@@ -77,6 +77,7 @@ function renderModel(m) {
   $("#model-progress").hidden = !busy;
   $("#model-step").textContent = m.step || "";
   $("#model-bar").value = m.progress || 0;
+  $("#model-pct").textContent = busy && m.progress ? `${Math.round(m.progress * 100)}%` : "";
   $("#model-next").hidden = busy || (m.allowed && !m.ready && m.state !== "error");
   err("#model-error", m.state === "error" ? m.error : "");
 }
@@ -147,10 +148,10 @@ function card(c, checked) {
   const badge = node.querySelector(".badge");
   badge.textContent = c.status;
   badge.dataset.status = c.status;
-  for (const e of c.evidence.slice(0, 3)) {
-    const li = document.createElement("li");
-    li.textContent = e;
-    node.querySelector(".evidence").appendChild(li);
+  for (const e of c.evidence.slice(0, 4)) {
+    const chip = document.createElement("span");
+    chip.textContent = e.replace(/(\d{4}-\d{2}-\d{2})T[0-9:.]+Z?([+-]\d{2}:\d{2})?/g, "$1");
+    node.querySelector(".chips").appendChild(chip);
   }
   node.querySelector(".actions").textContent = c.actions.length ? `Can do: ${c.actions.join(", ")}` : "";
   node.querySelector(".domains").value = c.domains.join(", ");
@@ -161,7 +162,8 @@ async function renderCandidates() {
   $("#scan").hidden = true;
   $("#found").hidden = false;
   $("#cards").innerHTML = "";
-  if (active.length === 0) $("#cards").innerHTML = '<p class="muted">No active projects found. Add them by hand below.</p>';
+  $("#found-title").textContent = active.length ? `Found ${active.length} project${active.length === 1 ? "" : "s"}` : "No active projects found";
+  if (active.length === 0) $("#cards").innerHTML = '<p class="muted">Nothing on this Mac looked active in the last 6 months. Add your projects by hand below, with the email domain of each client.</p>';
   for (const c of active) $("#cards").appendChild(card(c, c.recommended === "add"));
   $("#older").hidden = inactive.length === 0;
   for (const c of inactive) $("#older-cards").appendChild(card(c, false));
@@ -189,5 +191,5 @@ $("#finish").onclick = async () => {
 // Resume where the user left off (Google done already, for example).
 (async () => {
   const s = await status();
-  show(s.google.connected ? (s.projects > 0 ? "done" : "claude") : "google");
+  show(s.google.connected ? (s.done || s.projects > 0 ? "projects" : "claude") : "google");
 })();

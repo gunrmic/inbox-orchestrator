@@ -1,6 +1,6 @@
 // Menu bar companion. Talks only to the local daemon on 127.0.0.1 with the token in
 // ~/.inbox-orchestrator/api-token. Holds no credentials of its own.
-const { app, BrowserWindow, ipcMain, Notification, shell, nativeImage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Notification, shell, nativeImage } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const { menubar } = require("menubar");
 const fs = require("node:fs");
@@ -91,11 +91,41 @@ async function refreshBadge() {
   }
 }
 
-// ---- Standalone app (.dmg): the daemon and CLI ship inside the app, run on Electron's Node.
-const CLI = app.isPackaged ? path.join(process.resourcesPath, "cli", "dist", "cli.js") : null;
+// ---- The agent (daemon). In the .dmg the CLI ships inside the app and runs on Electron's
+// Node; in development it is the repo's build. A daemon started elsewhere (launchd agent,
+// `ibo start`) is used as is.
+const CLI = app.isPackaged ? path.join(process.resourcesPath, "cli", "dist", "cli.js") : path.join(__dirname, "..", "dist", "cli.js");
+const LOG = path.join(HOME, "logs", "app-daemon.log");
+const APP_PREFS = path.join(HOME, "app.json");
 let daemon = null;
+let lastExit = null;
+let userPath = process.env.PATH || "";
 
-const nodeEnv = () => ({ ...process.env, ELECTRON_RUN_AS_NODE: "1", PATH: `${process.env.PATH || ""}:/opt/homebrew/bin:/usr/local/bin` });
+function prefs() {
+  try {
+    return { autoStart: app.isPackaged, ...JSON.parse(fs.readFileSync(APP_PREFS, "utf8")) };
+  } catch {
+    // The installed app keeps its agent running; a development run never starts one by itself.
+    return { autoStart: app.isPackaged };
+  }
+}
+function savePrefs(p) {
+  fs.mkdirSync(HOME, { recursive: true });
+  fs.writeFileSync(APP_PREFS, JSON.stringify({ ...prefs(), ...p }, null, 2));
+}
+
+/** Apps opened from Finder get a bare PATH; the agent needs the user's (claude, git, npx, ollama). */
+function loadLoginPath() {
+  if (process.platform !== "darwin") return;
+  execFile(process.env.SHELL || "/bin/zsh", ["-ilc", "printf %s \"$PATH\""], { timeout: 5000 }, (err, out) => {
+    if (!err && out) userPath = out.trim().split("\n").pop();
+  });
+}
+const nodeEnv = () => ({
+  ...process.env,
+  ELECTRON_RUN_AS_NODE: "1",
+  PATH: [userPath, "/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local", "bin"), "/usr/bin", "/bin"].join(":"),
+});
 
 async function daemonUp() {
   try {
@@ -106,11 +136,49 @@ async function daemonUp() {
   }
 }
 
-/** A daemon may already run (launchd agent or `ibo start`); otherwise the app runs its own. */
+function logTail(lines = 40) {
+  try {
+    return fs.readFileSync(LOG, "utf8").trim().split("\n").slice(-lines).join("\n");
+  } catch {
+    return "";
+  }
+}
+
+function startAgent() {
+  if (daemon || !fs.existsSync(CLI)) return false;
+  fs.mkdirSync(path.dirname(LOG), { recursive: true });
+  const out = fs.openSync(LOG, "a");
+  fs.writeSync(out, `\n--- started by the app ${new Date().toISOString()} ---\n`);
+  daemon = spawn(process.execPath, [CLI, "start"], { env: nodeEnv(), stdio: ["ignore", out, out] });
+  daemon.on("exit", (code, signal) => {
+    lastExit = { code, signal, at: new Date().toISOString() };
+    daemon = null;
+    refreshBadge();
+  });
+  return true;
+}
+
+function stopAgent() {
+  if (daemon) daemon.kill("SIGTERM");
+}
+
+/** Keeps the agent running unless the user stopped it. */
 async function ensureDaemon() {
-  if (!CLI || (await daemonUp())) return;
-  daemon = spawn(process.execPath, [CLI, "start"], { env: nodeEnv(), stdio: "ignore" });
-  daemon.on("exit", () => (daemon = null));
+  if (!prefs().autoStart || (await daemonUp())) return;
+  startAgent();
+}
+
+async function agentState() {
+  const up = await daemonUp();
+  return {
+    running: up,
+    startedByApp: !!daemon,
+    canStart: fs.existsSync(CLI),
+    autoStart: prefs().autoStart,
+    lastExit,
+    log: up ? "" : logTail(),
+    logPath: LOG,
+  };
 }
 
 // ---- First run: a setup window in the app itself. No Terminal.
@@ -140,13 +208,34 @@ async function checkSetup() {
   }
 }
 
+/** Running from the .dmg or Downloads breaks updates and login items: offer to move it. */
+async function offerMoveToApplications() {
+  if (!app.isPackaged || process.platform !== "darwin" || app.isInApplicationsFolder()) return;
+  const { response } = await dialog.showMessageBox({
+    type: "question",
+    buttons: ["Move to Applications", "Not now"],
+    defaultId: 0,
+    cancelId: 1,
+    message: "Move Inbox Orchestrator to your Applications folder?",
+    detail: "It needs to live in Applications to start at login and to update itself.",
+  });
+  if (response === 0) {
+    try {
+      app.moveToApplicationsFolder();
+    } catch (err) {
+      dialog.showErrorBox("Could not move the app", String(err && err.message ? err.message : err));
+    }
+  }
+}
+
 mb.on("ready", async () => {
   mb.tray.setTitle(" …");
-  if (CLI) {
-    app.setLoginItemSettings({ openAtLogin: true });
-    await ensureDaemon();
-    setInterval(ensureDaemon, 60_000);
-  }
+  loadLoginPath();
+  await offerMoveToApplications();
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: prefs().autoStart });
+  await new Promise((r) => setTimeout(r, 300));
+  await ensureDaemon();
+  setInterval(ensureDaemon, 60_000);
   // The daemon needs a moment after starting; keep trying in the background until it answers.
   void (async () => {
     for (let i = 0; i < 30 && !(await checkSetup()); i++) await new Promise((r) => setTimeout(r, 1000));
@@ -155,7 +244,7 @@ mb.on("ready", async () => {
   setInterval(refreshBadge, 10_000);
 });
 
-app.on("before-quit", () => daemon?.kill("SIGTERM"));
+app.on("before-quit", () => stopAgent());
 
 ipcMain.handle("ibo:call", (_e, route, method, body) => call(route, method, body));
 // Only links the app itself shows: Gmail threads, Google sign-in, and two download pages.
@@ -164,6 +253,28 @@ ipcMain.handle("ibo:open", (_e, url) => {
   if (typeof url === "string" && ALLOWED.some((p) => url.startsWith(p))) shell.openExternal(url);
 });
 ipcMain.handle("ibo:closeSetup", () => setupWin?.close());
+ipcMain.handle("ibo:agent", () => agentState());
+ipcMain.handle("ibo:startAgent", async () => {
+  savePrefs({ autoStart: true });
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true });
+  const started = startAgent();
+  for (let i = 0; i < 40 && !(await daemonUp()); i++) await new Promise((r) => setTimeout(r, 250));
+  refreshBadge();
+  return { started, ...(await agentState()) };
+});
+ipcMain.handle("ibo:stopAgent", () => {
+  savePrefs({ autoStart: false });
+  stopAgent();
+  return true;
+});
+ipcMain.handle("ibo:autoStart", (_e, on) => {
+  savePrefs({ autoStart: !!on });
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!on });
+  return prefs().autoStart;
+});
+ipcMain.handle("ibo:showLog", () => shell.openPath(LOG));
+ipcMain.handle("ibo:openSetup", () => openSetup());
+ipcMain.handle("ibo:quit", () => app.quit());
 ipcMain.handle("ibo:refresh", () => refreshBadge());
 
 app.on("window-all-closed", (e) => e.preventDefault());

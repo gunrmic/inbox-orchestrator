@@ -7,29 +7,70 @@
     <title>Inbox Orchestrator</title>
   </head>
   <body>
-    <header>
-      <strong>Inbox Orchestrator</strong>
-      <label class="kill"><input type="checkbox" id="kill" /> Kill switch</label>
-    </header>
-    <div id="banner" class="banner" hidden></div>
-    <section id="suggestions" hidden></section>
-    <main id="cards"></main>
-    <footer id="footer"></footer>
+    <div class="shell">
+      <header>
+        <div class="title-row">
+          <div class="brand">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9 6 9-6" /><rect x="3" y="5" width="18" height="14" rx="2" /></svg>
+            <span>Inbox Orchestrator</span>
+          </div>
+          <button id="settings" class="icon" aria-label="Setup and projects" title="Setup and projects">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" /></svg>
+          </button>
+        </div>
+        <div id="status" class="status" data-tone="idle"><span class="dot"></span><span id="status-text">Connecting…</span></div>
+        <div class="tabs" role="tablist">
+          <button id="tab-waiting" role="tab" aria-selected="true">Waiting</button>
+          <button id="tab-activity" role="tab" aria-selected="false">Activity</button>
+        </div>
+      </header>
+
+      <div id="banner" class="banner" hidden></div>
+
+      <main id="waiting">
+        <section id="suggestions" hidden></section>
+        <div id="cards"></div>
+      </main>
+
+      <main id="activity" hidden></main>
+
+      <main id="stopped" class="stopped" hidden>
+        <div class="stopped-icon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg></div>
+        <h2>The agent is not running</h2>
+        <p id="stopped-text">It reads new mail and prepares the work. Nothing is lost while it is off: when it starts, it picks up where it stopped.</p>
+        <button id="start" class="primary large"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" /></svg>Start the agent</button>
+        <label class="check"><input type="checkbox" id="autostart" /> Start automatically when I log in</label>
+        <button id="show-log" class="link">Why did it stop? Show the log</button>
+        <pre id="log" hidden></pre>
+      </main>
+
+      <footer>
+        <label class="switch"><input type="checkbox" id="kill" /><span class="track"><span class="knob"></span></span>Pause all actions</label>
+        <div class="footer-right">
+          <button id="stop" class="ghost" hidden>Stop agent</button>
+          <button id="quit" class="ghost">Quit</button>
+        </div>
+      </footer>
+    </div>
+
     <template id="card">
       <article class="card">
-        <div class="meta"><span class="risk"></span><span class="project"></span></div>
+        <div class="meta"><span class="project"></span><span class="risk"></span></div>
         <h3 class="summary"></h3>
-        <p class="email"></p>
+        <button class="email link"></button>
         <p class="reason"></p>
         <div class="assign" hidden>
-          <label>Which project is <span class="who"></span>? <select class="assign-select"></select></label>
-          <button class="assign-btn">Save</button>
+          <label class="sr-only">Project for <span class="who"></span></label>
+          <select class="assign-select"></select>
+          <button class="assign-btn dark">Save</button>
         </div>
-        <details class="args-wrap"><summary>Edit details</summary><textarea class="args" rows="6"></textarea></details>
         <div class="buttons">
-          <button class="approve">Do it</button>
-          <button class="edit">Save edits and do it</button>
-          <button class="reject">Dismiss</button>
+          <button class="approve primary">Do it</button>
+          <details class="args-wrap"><summary>Edit</summary>
+            <textarea class="args" rows="6" aria-label="Details"></textarea>
+            <button class="edit primary">Save and do it</button>
+          </details>
+          <button class="reject ghost">Dismiss</button>
         </div>
       </article>
     </template>

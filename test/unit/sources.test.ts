@@ -8,6 +8,7 @@ import { lastFileChange } from "../../src/discovery/activity.js";
 import { scanCodexSessions, scanEditorWorkspaces, editorStorageRoots } from "../../src/discovery/editors.js";
 import { readAssistantExport } from "../../src/discovery/exports.js";
 import { linkByName, nameTokens, orgOfDomain, proposeDeterministic, type Evidence } from "../../src/discovery/propose.js";
+import { mergeCandidates } from "../../src/discovery/onboard.js";
 
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p));
 const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000);
@@ -166,5 +167,20 @@ describe("linking signals by name", () => {
 
   it("works with no assistant exports", () => {
     expect(linkByName([], { ...base, assistants: undefined, senders: [] })).toEqual([]);
+  });
+});
+
+describe("merging the model's projects with the signals", () => {
+  const cand = (id: string, domains: string[] = [], repo?: string) => ({
+    project: { id, name: id, status: "live" as const, match: { senders: [], domains, keywords: [] }, playbook: repo ? { prepare_fix: { kind: "claude-code" as const, repo, baseBranch: "main" } } : {}, autonomy: {} },
+    evidence: [],
+    confidence: 0.5,
+    summary: "",
+  });
+  it("keeps every project the model left out, without duplicating ones it covered", () => {
+    const model = [cand("colEven", ["coleven.com"]), cand("hawk-app", [], "/p/hawk")];
+    const signals = [cand("coleven", ["coleven.com"]), cand("hawk", [], "/p/hawk"), cand("shom", [], "/p/shom"), cand("acme", ["acme.io"]), cand("colEven")];
+    expect(mergeCandidates(model, signals).map((c) => c.project.id)).toEqual(["colEven", "hawk-app", "shom", "acme"]);
+    expect(mergeCandidates([], signals)).toHaveLength(5);
   });
 });

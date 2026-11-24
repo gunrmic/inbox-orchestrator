@@ -11,15 +11,18 @@ export function defaultScanRoots(home = homedir()): string[] {
 
 const SKIP = new Set(["node_modules", ".git", ".next", "dist", "build", "out", "vendor", "Library", ".cache"]);
 
+/** Files that mark a folder as a project even without git. */
+const MARKERS = ["package.json", "pyproject.toml", "requirements.txt", "go.mod", "Cargo.toml", "Gemfile", "pom.xml", "build.gradle", "composer.json", "CLAUDE.md", "AGENTS.md", "base44.config.json", ".base44"];
+
 /**
- * Finds git repos under the roots, up to `depth` levels down. Does not descend into a repo,
+ * Finds projects (git repos, or folders with a project file such as package.json) under the roots, up to `depth` levels down. Does not descend into a repo,
  * so a monorepo counts once. This catches projects that never ran in Claude Code locally.
  */
 export function findRepos(roots = defaultScanRoots(), depth = 3, limit = 200): string[] {
   const found: string[] = [];
   const walk = (dir: string, level: number) => {
     if (found.length >= limit) return;
-    if (existsSync(join(dir, ".git"))) {
+    if (existsSync(join(dir, ".git")) || (level > 0 && MARKERS.some((m) => existsSync(join(dir, m))))) {
       found.push(dir);
       return;
     }

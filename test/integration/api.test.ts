@@ -183,3 +183,26 @@ describe("suggestions from weekly discovery", () => {
     expect(rt.projects().map((p) => p.id)).toContain("fresh");
   });
 });
+
+describe("activity feed", () => {
+  it("tells what happened in words, newest first, and leaves internal steps out", async () => {
+    rt.store.saveEmail(email({ id: "a1" }), "hawk", {});
+    rt.store.audit("filter", { from: "x@news.com", subject: "Weekly digest", hasAction: false, model: "ollama:qwen3:8b" }, { emailId: "a1" });
+    rt.store.audit("plan", { project: "hawk" });
+    const card = pendingCard();
+    rt.store.audit("decision", { action: "schedule_meeting", kind: "suggest", reason: "Visible to others" }, { actionId: card.id });
+    rt.store.audit("failed", { action: "x", error: "boom" });
+    rt.store.audit("killswitch", { on: true });
+    rt.store.audit("unknown_kind", {});
+    const items = (await app.inject({ url: "/activity", headers: auth })).json();
+    expect(items.map((i: { tone: string; title: string }) => `${i.tone}: ${i.title}`)).toEqual([
+      "info: Paused: nothing runs, everything becomes a card",
+      "error: Failed: x",
+      "wait: Waiting for you: Meet Jack",
+      "skip: Skipped: “Weekly digest”",
+    ]);
+    expect(items[3].detail).toMatch(/sorted on this Mac/);
+    const status = (await app.inject({ url: "/status", headers: auth })).json();
+    expect(status.agent).toBe("starting");
+  });
+});

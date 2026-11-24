@@ -54,7 +54,7 @@ export async function gatherEvidence(log: (s: string) => void, imports: string[]
 
   log("Looking for git repos in your code folders (~/projects, ~/apps, ~/code, ...)...");
   const scanned = findRepos().filter((f) => !byFolder.has(f));
-  for (const f of scanned) add(f, "", "git scan");
+  for (const f of scanned) add(f, "", "folder scan");
   log(`  ${scanned.length} more repos`);
 
   log("Checking git activity and when files last changed...");
@@ -238,23 +238,40 @@ async function askManualProject(ev: Evidence): Promise<Project> {
   };
 }
 
+/**
+ * The model's grouping wins where it covers a signal; anything it left out (a folder, a
+ * mail domain, an exported project) is still offered, so a terse model answer never hides a project.
+ */
+export function mergeCandidates(fromModel: Candidate[], fromSignals: Candidate[]): Candidate[] {
+  const ids = new Set(fromModel.map((c) => c.project.id));
+  const domains = new Set(fromModel.flatMap((c) => c.project.match.domains));
+  const repos = new Set(fromModel.flatMap((c) => Object.values(c.project.playbook).flatMap((s) => (s.kind === "claude-code" ? [s.repo] : []))));
+  const extra = fromSignals.filter((c) => {
+    if (ids.has(c.project.id)) return false;
+    if (c.project.match.domains.some((d) => domains.has(d))) return false;
+    const repo = Object.values(c.project.playbook).find((s) => s.kind === "claude-code");
+    return !(repo && repo.kind === "claude-code" && repos.has(repo.repo));
+  });
+  return [...fromModel, ...extra];
+}
+
 /** Model proposal when a model is available, folder- and name-based otherwise. Split into active and dead. */
 export async function proposeCandidates(
   models: ModelRouter | null,
   evidence: Evidence,
   log: (s: string) => void,
 ): Promise<{ active: Candidate[]; dead: Candidate[] }> {
-  let candidates: Candidate[];
+  const base = proposeDeterministic(evidence);
+  let candidates: Candidate[] = base;
   if (models) {
     log("Asking the model to connect the evidence into projects...");
     try {
-      candidates = await proposeWithModel(models, evidence);
+      const modelCands = await proposeWithModel(models, evidence);
+      candidates = mergeCandidates(modelCands, base);
+      log(`  model: ${modelCands.length} projects, ${candidates.length - modelCands.length} more from folders, mail and exports`);
     } catch (err) {
       log(pc.yellow(`Model proposal failed (${err instanceof Error ? err.message : err}); using folder-based proposal.`));
-      candidates = proposeDeterministic(evidence);
     }
-  } else {
-    candidates = proposeDeterministic(evidence);
   }
   const dead = candidates.filter((c) => c.project.status === "dead");
   const active = candidates

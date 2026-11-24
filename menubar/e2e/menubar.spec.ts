@@ -112,7 +112,22 @@ test("shows the daemon is not running", async () => {
   const port = await freePort();
   const ws = workspace(port);
   const page = await launchMenubar({ HOME: ws.home, IBO_HOME: ws.iboHome });
-  await expect(page.locator("#cards")).toContainText("The daemon is not running");
+  await expect(page.locator("#stopped")).toContainText("The agent is not running");
+  await expect(page.locator("#start")).toBeVisible();
+});
+
+test("the Start button runs the agent from the app, and its status shows in the window", async () => {
+  const port = await freePort();
+  const ws = workspace(port);
+  const env = { HOME: ws.home, IBO_HOME: ws.iboHome, IBO_SECRETS_BACKEND: "file", IBO_NO_AUTO_UPDATE: "1", IBO_CLAUDE_BIN: join(ws.home, "no-claude"), IBO_SCAN_ROOTS: join(ws.home, "none") };
+  const page = await launchMenubar(env);
+  await expect(page.locator("#stopped")).toBeVisible();
+  await page.locator("#start").click();
+  // No Gmail yet: the agent runs and says what it is waiting for.
+  await expect(page.locator("#status")).toContainText("Not connected to Gmail yet", { timeout: 20_000 });
+  await expect(page.locator("#stop")).toBeVisible();
+  await page.locator("#tab-activity").click();
+  await expect(page.locator("#activity")).toContainText("No activity yet");
 });
 
 test("approve a card from the menu bar and toggle the kill switch", async () => {
@@ -141,7 +156,7 @@ test("approve a card from the menu bar and toggle the kill switch", async () => 
   const card = page.locator(".card");
   await expect(card).toHaveCount(1, { timeout: 20_000 });
   await expect(card.locator(".summary")).toHaveText("Open a ticket for the date filter bug");
-  await expect(card.locator(".risk")).toContainText("Level 2");
+  await expect(card.locator(".risk")).toHaveText("Visible to others");
   await expect(card.locator(".email")).toContainText("Graph does not load");
   expect(readLines(ws.mcpLog).some((c) => c.tool === "create_ticket")).toBe(false);
 
@@ -152,8 +167,15 @@ test("approve a card from the menu bar and toggle the kill switch", async () => 
   await expect(page.locator("#cards")).toContainText("Nothing waiting for you.");
   await expect.poll(() => readLines(ws.mcpLog).find((c) => c.tool === "create_ticket")?.args).toEqual({ title: "Edited title" });
 
+  // The activity tab tells what happened, in words.
+  await page.locator("#tab-activity").click();
+  await expect(page.locator("#activity")).toContainText("New email: “Graph does not load”");
+  await expect(page.locator("#activity")).toContainText("You approved");
+
   // Kill switch from the UI is persisted by the daemon.
-  await page.locator("#kill").check();
+  await page.locator("label.switch").click();
+  await expect(page.locator("#kill")).toBeChecked();
+  await expect(page.locator("#status")).toContainText("Paused");
   await expect.poll(() => readFileSync(join(ws.iboHome, "settings.yaml"), "utf8")).toContain("killSwitch: true");
 });
 

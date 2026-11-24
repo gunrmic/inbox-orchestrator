@@ -192,12 +192,10 @@ export class Store {
       .run(now(), kind, ids.emailId ?? null, ids.actionId ?? null, JSON.stringify(detail));
   }
 
-  recentAudit(limit = 50): { at: string; kind: string; detail: string }[] {
-    return this.db.prepare("SELECT at, kind, detail FROM audit ORDER BY id DESC LIMIT ?").all(limit) as unknown as {
-      at: string;
-      kind: string;
-      detail: string;
-    }[];
+  recentAudit(limit = 50): { at: string; kind: string; detail: string; emailId: string | null; actionId: number | null }[] {
+    return this.db
+      .prepare("SELECT at, kind, detail, email_id AS emailId, action_id AS actionId FROM audit ORDER BY id DESC LIMIT ?")
+      .all(limit) as unknown as { at: string; kind: string; detail: string; emailId: string | null; actionId: number | null }[];
   }
 
   /** Approved without edits: streak + 1. Edited or rejected: reset. Returns the new streak. */

@@ -16,10 +16,23 @@
     </ol>
 
     <section id="google" class="step">
-      <h1>Turn email into prepared work</h1>
-      <p>Inbox Orchestrator reads your new mail, works out which project it is about, and prepares the work: a task, a reminder, a fix on a new branch. Anything that others will see waits for your OK.</p>
-      <p class="muted">Read-only access to Gmail and Calendar. Mail is read on this Mac and never stored on any server of ours.</p>
-      <button id="google-btn" class="primary">Sign in with Google</button>
+      <div class="split">
+        <div class="col">
+          <h1 class="hero">Turn email into<br />prepared work</h1>
+          <p>Inbox Orchestrator reads new mail, works out which project it is about, and prepares the work: a ticket, a reminder, a fix on a new branch. Anything other people will see waits for your OK.</p>
+          <button id="google-btn" class="google">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.9 6.1C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 2.9-2.2 5.4-4.7 7.1l7.6 5.9c4.4-4.1 6.9-10.1 6.9-17.5z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+            Sign in with Google
+          </button>
+          <p class="muted">Read-only access to Gmail and Calendar. Mail is read on this Mac. Nothing is stored on any server of ours.</p>
+        </div>
+        <div class="preview" aria-hidden="true">
+          <div class="mail"><span class="from">From Jack · ColEven</span><span>“The graph doesn’t load when I filter by date. Can we talk tomorrow at 10?”</span></div>
+          <svg class="arrow" width="16" height="20" viewBox="0 0 16 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 2v15M3 12l5 5 5-5"/></svg>
+          <div class="result"><span class="dot ok"></span>Fix prepared on a new branch</div>
+          <div class="result"><span class="dot warn"></span>Meeting invite, waiting for your OK</div>
+        </div>
+      </div>
       <p id="google-wait" class="muted" hidden>Waiting for you in the browser… <a href="#" id="google-link">Open it again</a></p>
       <p id="google-error" class="error" hidden></p>
     </section>
@@ -44,23 +57,24 @@
 
     <section id="model" class="step" hidden>
       <h1>Sort email on this Mac, for free</h1>
-      <p>A small local model decides which emails need action. Mail that needs nothing never leaves your Mac.</p>
+      <p>A small local model decides which emails need action. Mail that needs nothing never leaves your Mac, and you pay nothing for it.</p>
       <p id="model-ok" class="ok" hidden></p>
       <p id="model-blocked" class="muted" hidden>Local models are off by your organization's policy. Claude does this step instead.</p>
       <div id="model-actions" hidden>
         <button id="model-install" class="primary"></button>
         <button id="model-skip">Skip for now</button>
       </div>
-      <div id="model-progress" hidden>
-        <p id="model-step"></p>
+      <div id="model-progress" class="panel" hidden>
+        <div class="panel-head"><strong id="model-step"></strong><span id="model-pct" class="pct"></span></div>
         <progress id="model-bar" max="1" value="0"></progress>
+        <p class="muted">You can continue while it downloads. Until it is ready, Claude sorts your mail.</p>
       </div>
       <p id="model-error" class="error" hidden></p>
       <div class="nav"><button id="model-next" class="primary" hidden>Continue</button></div>
     </section>
 
     <section id="projects" class="step" hidden>
-      <h1>Your projects</h1>
+      <h1 id="found-title">Your projects</h1>
       <div id="exports" hidden>
         <p>Found an export from Claude or ChatGPT in Downloads. Project names and chat titles help find projects that have no code on this Mac.</p>
         <div id="export-list"></div>
@@ -76,7 +90,7 @@
         <div id="cards"></div>
         <details id="older" hidden><summary>Inactive for 6 months or more</summary><div id="older-cards"></div></details>
         <div id="manual"></div>
-        <button id="manual-add">Add a project I missed</button>
+        <button id="manual-add" class="dashed">+ Add a project I missed</button>
         <div class="nav"><button id="projects-save" class="primary">Save projects</button></div>
       </div>
     </section>
@@ -91,15 +105,15 @@
     <template id="card">
       <article class="card">
         <label class="head"><input type="checkbox" class="pick" /> <strong class="name"></strong> <span class="badge"></span></label>
-        <ul class="evidence"></ul>
-        <p class="actions muted"></p>
-        <label class="field">Email domains <input class="domains" placeholder="client.com" /></label>
+        <div class="chips"></div>
+        <p class="actions"></p>
+        <label class="field">Mail from <input class="domains" placeholder="client.com" /></label>
       </article>
     </template>
     <template id="manual-row">
       <div class="card manual-row">
         <label class="field">Name <input class="m-name" placeholder="ColEven" /></label>
-        <label class="field">Email domains <input class="m-domains" placeholder="coleven.com" /></label>
+        <label class="field">Mail from <input class="m-domains" placeholder="coleven.com" /></label>
       </div>
     </template>
     <script src="setup.js"></script>

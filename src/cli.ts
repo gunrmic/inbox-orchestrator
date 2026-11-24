@@ -311,7 +311,8 @@ program
     check(existsSync(paths.projects) && loadProjects().projects.length > 0, "Projects mapped", "ibo onboard");
   });
 
-program.parseAsync().catch((err) => {
+// Explicit "node" argv: inside the .dmg this runs on Electron, where commander would otherwise skip the script path wrongly.
+program.parseAsync(process.argv, { from: "node" }).catch((err) => {
   console.error(pc.red(err instanceof Error ? err.message : String(err)));
   process.exit(1);
 });

@@ -95,10 +95,15 @@ export async function startDaemon(): Promise<void> {
     if (source) return source;
     try {
       source = await emailSource();
+      rt.store.set("daemon:state", "watching");
+      rt.store.set("daemon:message", `Watching ${process.env.IBO_TEST_INBOX ? "test inbox" : "Gmail"}`);
+      rt.store.audit("daemon", { message: `Started. Watching ${process.env.IBO_TEST_INBOX ? "a test inbox" : "Gmail"} for ${rt.projects().length} projects` });
       log(
         `Watching ${process.env.IBO_TEST_INBOX ? "test inbox" : "Gmail"}. ${rt.projects().length} projects mapped. Mode: ${rt.settings().mode}${rt.settings().killSwitch ? pc.red(" KILL SWITCH ON") : ""}`,
       );
     } catch (err) {
+      rt.store.set("daemon:state", "waiting-setup");
+      rt.store.set("daemon:message", err instanceof Error ? err.message : String(err));
       if (!waitingLogged) log(`Waiting for setup: ${err instanceof Error ? err.message : err}`);
       waitingLogged = true;
     }
@@ -110,6 +115,7 @@ export async function startDaemon(): Promise<void> {
     if (stopping) return;
     stopping = true;
     log("Stopping...");
+    rt.store.set("daemon:state", "stopped");
     await api.close();
     await rt.close();
     process.exit(0);

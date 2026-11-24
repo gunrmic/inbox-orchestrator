@@ -8,6 +8,7 @@ import { processEmail, runAction } from "../pipeline/index.js";
 import { applyAssignment, type AssignInfo } from "../pipeline/assign.js";
 import { listSuggestions, resolveSuggestion } from "../discovery/rediscover.js";
 import { registerSetupApi } from "./setup-api.js";
+import { activity } from "./activity.js";
 import type { Runtime } from "../runtime.js";
 
 /** Token the menu bar app uses. Created once, readable only by the user. */
@@ -40,6 +41,9 @@ export function buildApi(rt: Runtime): FastifyInstance {
       projects: rt.projects().map((p) => ({ id: p.id, name: p.name ?? p.id, status: p.status })),
       lastPoll: rt.store.get("gmail:lastPoll"),
       suggestions: listSuggestions(rt.store).length,
+      /** "watching" once Gmail is connected; "waiting-setup" before. */
+      agent: rt.store.get("daemon:state") ?? "starting",
+      agentMessage: rt.store.get("daemon:message"),
     };
   });
 
@@ -140,6 +144,8 @@ export function buildApi(rt: Runtime): FastifyInstance {
   });
 
   app.get("/audit", async () => rt.store.recentAudit(100));
+
+  app.get("/activity", async () => activity(rt.store, 60));
 
   registerSetupApi(app, rt);
 

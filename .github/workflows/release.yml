@@ -20,12 +20,10 @@ on:
 permissions:
   contents: write
 
+# One job on one Mac: macOS runners queue for minutes, so the tests and the build share it.
 jobs:
-  macos-tests:
-    uses: ./.github/workflows/macos.yml
-
   dmg:
-    needs: macos-tests
+    name: Test on macOS and build the .dmg
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,8 +31,18 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            menubar/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Tests (unit, integration, CLI and daemon end to end)
+        run: npm test
+      - name: Menu bar app tests
+        working-directory: menubar
+        run: |
+          npm ci
+          npx playwright test
       - name: Build the app
         working-directory: menubar
         env:
