@@ -118,13 +118,28 @@ jobs:
         with:
           name: inbox-orchestrator-dmg
           path: build/dist/*.dmg
-      - name: Publish release
+      - name: Release name
+        id: tag
         if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
         env:
-          GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           if [ -n "$INPUT_VERSION" ]; then TAG="v${INPUT_VERSION#v}"; fi
-          # The .dmg for new users; the zip, blockmaps and latest-mac.yml for the app's own updater.
-          gh release create "$TAG" build/dist/*.dmg build/dist/*.zip build/dist/*.blockmap build/dist/latest-mac.yml --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      # A JavaScript action, so the runner needs no gh CLI (a self-hosted Mac may not have it).
+      # The .dmg for new users; the zip, blockmaps and latest-mac.yml for the app's own updater.
+      - name: Publish release
+        if: steps.tag.outputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            build/dist/*.dmg
+            build/dist/*.zip
+            build/dist/*.blockmap
+            build/dist/latest-mac.yml
