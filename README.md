@@ -325,7 +325,7 @@ On Linux the menu bar tests need a virtual display: `cd menubar && xvfb-run -a n
 
 - **pre-commit** (Husky): typecheck, build, unit, integration and e2e tests.
 - **pre-push**: everything, including coverage thresholds, the real installer and the menu bar app.
-- **GitHub Actions**: every push and pull request runs the full suite on macOS and Linux, plus Node 22, 24 and 26.
+- **GitHub Actions**: every push and pull request runs the full suite and the menu bar app on Linux, plus Node 22, 24 and 26 (about a minute). macOS runners are scarce and often queue for many minutes, so the macOS suite runs daily, on demand, and before every release (`macos.yml`). The pre-push hook already runs everything on your Mac.
 
 Use `git commit --no-verify` only in an emergency; CI runs the same checks anyway.
 

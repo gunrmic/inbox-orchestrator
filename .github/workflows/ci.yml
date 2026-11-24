@@ -1,6 +1,9 @@
 name: CI
 
-# Every push and pull request runs the full suite on macOS and Linux.
+# Every push and pull request runs the full suite on Linux, which starts right away and takes
+# about a minute. macOS runners are scarce and often queue for many minutes, so the macOS
+# suite runs daily and before every release instead (.github/workflows/macos.yml). Job names
+# keep the "(ubuntu-latest)" suffix so branch protection's required checks keep matching.
 on:
   push:
     branches: [main]
@@ -17,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +38,7 @@ jobs:
       - name: Installer (real install.sh from this commit)
         run: npm run test:install
       - uses: actions/upload-artifact@v4
-        if: always() && matrix.os == 'ubuntu-latest'
+        if: always()
         with:
           name: coverage
           path: coverage/
@@ -46,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -61,13 +64,8 @@ jobs:
       - run: npm run build
       - run: npm ci
         working-directory: menubar
-      - name: Playwright + Electron (Linux, virtual display)
-        if: runner.os == 'Linux'
+      - name: Playwright + Electron (virtual display)
         run: xvfb-run -a npx playwright test
-        working-directory: menubar
-      - name: Playwright + Electron (macOS)
-        if: runner.os == 'macOS'
-        run: npx playwright test
         working-directory: menubar
       - uses: actions/upload-artifact@v4
         if: failure()

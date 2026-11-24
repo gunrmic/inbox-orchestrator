@@ -1,0 +1,51 @@
+name: macOS
+
+# The full suite and the menu bar app on a real Mac, in one job so it waits for a single
+# runner. Runs daily, on demand, and before every release (release.yml calls it).
+# Every push runs on Linux in ci.yml; this catches what only macOS has: launchd,
+# Reminders, the Keychain and the Electron app on macOS.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS full suite and menu bar app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            menubar/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Unit + integration with coverage thresholds
+        run: npm run test:coverage
+      - name: End to end (CLI and daemon as processes)
+        run: npx vitest run --project e2e
+      - name: Installer (real install.sh from this commit)
+        run: npm run test:install
+      - run: npm ci
+        working-directory: menubar
+      - name: Playwright + Electron
+        run: npx playwright test
+        working-directory: menubar
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: macos-test-results
+          path: |
+            menubar/playwright-report/
+            menubar/test-results/
+          if-no-files-found: ignore
