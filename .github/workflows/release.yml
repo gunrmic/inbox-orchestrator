@@ -40,13 +40,16 @@ jobs:
         env:
           SECRET_CSC_LINK: ${{ secrets.CSC_LINK }}
           SECRET_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
+          # Not secret: the Apple account and team that sign. Override with repository secrets of the same name.
+          APPLE_ID: ${{ secrets.APPLE_ID || 'omermic.om@gmail.com' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || 'VF3UX83GRZ' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # electron-builder treats an empty CSC_LINK as a path, so set it only when there is a certificate.
           if [ -n "$SECRET_CSC_LINK" ]; then
             export CSC_LINK="$SECRET_CSC_LINK" CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
+            # Notarize only when the app-specific password is there; otherwise sign without it.
+            [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] || unset APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD
             npm ci
             npm run dist
           else
@@ -71,6 +74,7 @@ jobs:
           echo; cat "$SMOKE_HOME/daemon.log"
           curl -sf -H "authorization: Bearer $(cat "$SMOKE_HOME/.ibo/api-token")" http://127.0.0.1:47811/status
           pkill -f "Contents/Resources/cli/dist/cli.js start" || true
+          spctl --assess --type execute --verbose=2 "$APP" || echo "Gatekeeper would block this build (not notarized)."
           hdiutil detach /tmp/ibo-dmg
       - uses: actions/upload-artifact@v4
         with:
