@@ -83,7 +83,7 @@ cd menubar && npm ci
 npm run dist       # build/dist/Inbox-Orchestrator.dmg (universal: Apple Silicon and Intel)
 ```
 
-Until the app is signed and notarized, macOS blocks it the first time: open **System Settings > Privacy & Security** and click **Open Anyway**. The release workflow signs and notarizes automatically when the Apple secrets are set (see `.github/workflows/release.yml`). You can use everything from the terminal too (`ibo pending`, `ibo approve <id>`).
+Until the app is signed with a Developer ID and notarized, macOS blocks it the first time: open **System Settings > Privacy & Security** and click **Open Anyway**. If macOS says the app "is damaged", that is the same block on an older build; run `xattr -cr "/Applications/Inbox Orchestrator.app"` and open it again. The release workflow signs and notarizes automatically when the Apple secrets are set (see `.github/workflows/release.yml`). You can use everything from the terminal too (`ibo pending`, `ibo approve <id>`).
 
 ## Setup
 

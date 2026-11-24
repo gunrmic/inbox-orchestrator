@@ -47,12 +47,21 @@ jobs:
           # electron-builder treats an empty CSC_LINK as a path, so set it only when there is a certificate.
           if [ -n "$SECRET_CSC_LINK" ]; then
             export CSC_LINK="$SECRET_CSC_LINK" CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
+            npm ci
+            npm run dist
           else
+            # No certificate: sign ad hoc. A completely unsigned app is reported as "damaged" on
+            # Apple Silicon; an ad hoc signed one gets the usual "Open Anyway" in Privacy & Security.
             export CSC_IDENTITY_AUTO_DISCOVERY=false
             unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            npm ci
+            node ../scripts/stage-cli.mjs
+            npx electron-builder --mac dmg --publish never -c.mac.identity=-
           fi
-          npm ci
-          npm run dist
+          # Fail the release if the app inside the .dmg does not pass a signature check.
+          hdiutil attach -nobrowse -mountpoint /tmp/ibo-dmg ../build/dist/Inbox-Orchestrator.dmg
+          codesign --verify --deep --strict --verbose=2 "/tmp/ibo-dmg/Inbox Orchestrator.app"
+          hdiutil detach /tmp/ibo-dmg
       - uses: actions/upload-artifact@v4
         with:
           name: inbox-orchestrator-dmg
