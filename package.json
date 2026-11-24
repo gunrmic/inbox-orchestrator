@@ -30,9 +30,16 @@
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --project unit --project integration --project e2e",
     "test:watch": "vitest",
-    "prepare": "tsc -p tsconfig.json"
+    "prepare": "tsc -p tsconfig.json && (husky || true)",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "npm run build && vitest run --project e2e",
+    "test:install": "vitest run --project install",
+    "test:menubar": "npm --prefix menubar test",
+    "test:coverage": "vitest run --project unit --project integration --coverage",
+    "test:all": "npm run typecheck && npm run build && npm test && npm run test:install && npm run test:menubar"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.13.0",
@@ -48,6 +55,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^5.1.1",
+    "husky": "^9.1.7",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.1.1"

@@ -12,26 +12,18 @@ import { loadProjects, loadSettings, saveSettings } from "./config/load.js";
 import { ensureHome, paths } from "./config/paths.js";
 import { onboard } from "./discovery/onboard.js";
 import { authorizeInteractive, saveClientCredentials } from "./gmail/auth.js";
-import { OllamaProvider } from "./models/providers.js";
+import { describeModel, OllamaProvider } from "./models/providers.js";
 import { buildModels, buildRuntime } from "./runtime.js";
 import { processEmail } from "./pipeline/index.js";
 import { apiToken } from "./server/api.js";
 import { anthropicKey, getSecret, setSecret } from "./util/secrets.js";
 import { installAgent, uninstallAgent } from "./util/launchd.js";
+import { suggestLocalModel } from "./util/local-model.js";
 import type { Email } from "./types.js";
 
 const run = promisify(execFile);
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 const RECOMMENDED = pc.green(" (recommended)");
-
-/** Suggest a local model size from installed memory. Models are configurable in settings.yaml. */
-export function suggestLocalModel(bytes = totalmem()): string {
-  const gb = bytes / 1024 ** 3;
-  if (gb >= 48) return "qwen3:30b";
-  if (gb >= 24) return "qwen3:14b";
-  if (gb >= 16) return "qwen3:8b";
-  return "qwen3:4b";
-}
 
 async function has(cmd: string): Promise<boolean> {
   try {
@@ -61,11 +53,25 @@ program
   .command("setup")
   .description("Connect Anthropic, Gmail and a local model. Safe to re-run.")
   .argument("[part]", "anthropic | gmail | models (default: all)")
-  .action(async (part?: string) => {
+  .option("--key-stdin", "anthropic: read the API key from stdin (no prompt, not in shell history)")
+  .option("--client-json <path>", "gmail: path to the Google OAuth client JSON (no prompt)")
+  .option("--local [model]", "models: triage with a local Ollama model (default: suggested by memory)")
+  .option("--paid", "models: always use the paid model (for orgs that block local models)")
+  .action(async (part: string | undefined, opts: { keyStdin?: boolean; clientJson?: string; local?: string | boolean; paid?: boolean }) => {
     ensureHome();
     const settings = loadSettings();
+    // Any flag means scripted mode: do only what the flags say, never prompt.
+    const scripted = !!(opts.keyStdin || opts.clientJson || opts.local || opts.paid);
+    const ask = (name: string) => !scripted && (!part || part === name);
 
-    if (!part || part === "anthropic") {
+    if (opts.keyStdin) {
+      const chunks: Buffer[] = [];
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+      const key = Buffer.concat(chunks).toString("utf8").trim();
+      if (!key) throw new Error("No key on stdin.");
+      await setSecret("anthropic-api-key", key);
+      console.log(pc.green("Anthropic API key saved."));
+    } else if (ask("anthropic")) {
       const existing = await anthropicKey();
       if (!existing || (await confirm({ message: "Replace the stored Anthropic API key?", default: false }))) {
         const key = await password({ message: "Anthropic API key (stored in the macOS Keychain):", mask: "*" });
@@ -73,7 +79,11 @@ program
       }
     }
 
-    if (!part || part === "gmail") {
+    if (opts.clientJson) {
+      await saveClientCredentials(readFileSync(opts.clientJson.replace(/^~/, process.env.HOME ?? ""), "utf8"));
+      console.log(pc.green("Google OAuth client saved."));
+      if (part === "gmail") await authorizeInteractive();
+    } else if (ask("gmail")) {
       console.log(
         `\nGmail uses your own Google Cloud OAuth client (Desktop app), read-only scope.\nSee README > "Connect Gmail" for the 3-minute setup.`,
       );
@@ -85,7 +95,17 @@ program
       console.log(pc.green("Gmail connected (read-only)."));
     }
 
-    if (!part || part === "models") {
+    if (opts.local || opts.paid) {
+      if (opts.paid) {
+        settings.org.allowLocalModels = false;
+      } else {
+        const model = typeof opts.local === "string" ? opts.local : suggestLocalModel();
+        settings.models.filter = { provider: "ollama", model };
+        settings.models.route = { provider: "ollama", model };
+        settings.org.allowLocalModels = true;
+      }
+      console.log(pc.green(`Triage model: ${opts.paid ? describeModel(settings.models.fallback) : `ollama:${settings.models.filter.model}`}`));
+    } else if (ask("models")) {
       const ollama = new OllamaProvider(settings.models.ollamaUrl);
       const up = await ollama.available();
       const suggested = suggestLocalModel();
@@ -118,9 +138,10 @@ program
   .command("onboard")
   .description("Discover your projects and tools, answer a few questions, write the config.")
   .option("--no-model", "Propose projects from folders only, without calling a model")
-  .action(async (opts: { model: boolean }) => {
+  .option("-y, --yes", "Accept every recommendation without asking (for scripts)")
+  .action(async (opts: { model: boolean; yes?: boolean }) => {
     const models = opts.model && (await anthropicKey()) ? buildModels(loadSettings()) : null;
-    await onboard(models);
+    await onboard(models, { assumeYes: !!opts.yes });
   });
 
 program

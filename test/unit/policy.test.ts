@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { decide, shouldOfferPromotion } from "../src/policy/engine.js";
-import { effectiveRisk, isDiscoverySafe, riskFloor, suggestRisk } from "../src/policy/risk.js";
-import { email, project, settings } from "./helpers.js";
+import { decide, shouldOfferPromotion } from "../../src/policy/engine.js";
+import { effectiveRisk, isDiscoverySafe, riskFloor, suggestRisk } from "../../src/policy/risk.js";
+import { email, project, settings } from "../helpers.js";
 
 const coleven = project({
   id: "coleven",

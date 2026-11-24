@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, parseAuthResults, parseMessage } from "../src/gmail/parse.js";
+import { addressOf, parseAuthResults, parseMessage } from "../../src/gmail/parse.js";
 
 const b64 = (s: string) => Buffer.from(s).toString("base64url");
 

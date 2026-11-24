@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ModelRouter } from "../src/models/router.js";
-import type { Provider } from "../src/models/providers.js";
-import { settings } from "./helpers.js";
+import { ModelRouter } from "../../src/models/router.js";
+import type { Provider } from "../../src/models/providers.js";
+import { settings } from "../helpers.js";
 
 const Out = z.object({ ok: z.boolean() });
 const req = { system: "s", user: "u", name: "n", description: "d", schema: {} };

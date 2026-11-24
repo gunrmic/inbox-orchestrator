@@ -3,12 +3,16 @@ import type { OAuth2Client } from "google-auth-library";
 import type { Store } from "../store/db.js";
 import type { Email } from "../types.js";
 import { addressOf, parseMessage } from "./parse.js";
+import type { EmailSource } from "./source.js";
 
-export class GmailSource {
+export class GmailSource implements EmailSource {
   private gmail: gmail_v1.Gmail;
 
-  constructor(auth: OAuth2Client) {
-    this.gmail = google.gmail({ version: "v1", auth });
+  /** Pass a ready Gmail API object to inject a fake in tests. */
+  constructor(auth: OAuth2Client | null, gmail?: gmail_v1.Gmail) {
+    if (gmail) this.gmail = gmail;
+    else if (auth) this.gmail = google.gmail({ version: "v1", auth });
+    else throw new Error("GmailSource needs an OAuth client or a Gmail API object.");
   }
 
   async getEmail(id: string): Promise<Email> {

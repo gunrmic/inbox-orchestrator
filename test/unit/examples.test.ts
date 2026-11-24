@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import YAML from "yaml";
-import { ProjectsFile, Settings, ToolsFile } from "../src/config/schema.js";
-import { effectiveRisk } from "../src/policy/risk.js";
+import { ProjectsFile, Settings, ToolsFile } from "../../src/config/schema.js";
+import { effectiveRisk } from "../../src/policy/risk.js";
 
-const read = (f: string) => YAML.parse(readFileSync(new URL(`../examples/${f}`, import.meta.url), "utf8"));
+const read = (f: string) => YAML.parse(readFileSync(new URL(`../../examples/${f}`, import.meta.url), "utf8"));
 
 describe("example configs", () => {
   it("parse with the real schemas", () => {

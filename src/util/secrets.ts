@@ -8,12 +8,15 @@ import { iboHome } from "../config/paths.js";
 const run = promisify(execFile);
 const SERVICE = "inbox-orchestrator";
 
+/** Keychain on macOS. IBO_SECRETS_BACKEND=file forces the file backend (used by tests and CI). */
+const useKeychain = () => platform() === "darwin" && process.env.IBO_SECRETS_BACKEND !== "file";
+
 /**
  * Secrets live in the macOS Keychain. On other platforms (CI, Linux dev boxes) they fall
  * back to a 0600 file in the state folder. Secrets never go into the YAML config files.
  */
 export async function getSecret(name: string): Promise<string | null> {
-  if (platform() === "darwin") {
+  if (useKeychain()) {
     try {
       const { stdout } = await run("security", ["find-generic-password", "-s", SERVICE, "-a", name, "-w"]);
       return stdout.trim() || null;
@@ -26,7 +29,7 @@ export async function getSecret(name: string): Promise<string | null> {
 }
 
 export async function setSecret(name: string, value: string): Promise<void> {
-  if (platform() === "darwin") {
+  if (useKeychain()) {
     await run("security", ["add-generic-password", "-U", "-s", SERVICE, "-a", name, "-w", value]);
     return;
   }

@@ -6,7 +6,7 @@
 # Re-running it updates to the latest version.
 set -euo pipefail
 
-REPO="https://github.com/gunrmic/inbox-orchestrator.git"
+REPO="${IBO_REPO:-https://github.com/gunrmic/inbox-orchestrator.git}"
 APP_DIR="${IBO_APP_DIR:-$HOME/.inbox-orchestrator-app}"
 
 say() { printf "\033[1m%s\033[0m\n" "$*"; }
@@ -31,23 +31,31 @@ else
 fi
 
 cd "$APP_DIR"
+# --ignore-scripts: no package runs code at install time (avoids native binaries such as
+# esbuild, which only the test tooling needs). The build itself is plain TypeScript.
 say "Installing dependencies..."
-npm ci --no-fund --no-audit --loglevel=error
+npm ci --ignore-scripts --no-fund --no-audit --loglevel=error
 say "Building..."
-npm run build --silent
+node node_modules/typescript/bin/tsc -p tsconfig.json
 chmod +x dist/cli.js
+npm prune --omit=dev --ignore-scripts --no-fund --no-audit --loglevel=error
+
 say "Linking the ibo command..."
-npm link --no-fund --no-audit --loglevel=error >/dev/null
+BIN_DIR="$(npm prefix -g)/bin"
+mkdir -p "$BIN_DIR"
+ln -sf "$APP_DIR/dist/cli.js" "$BIN_DIR/ibo"
 
-command -v ibo >/dev/null || fail "Installed, but 'ibo' is not on your PATH. Add $(npm prefix -g)/bin to PATH."
+command -v ibo >/dev/null || fail "Installed, but 'ibo' is not on your PATH. Add $BIN_DIR to PATH."
 
-if ! command -v claude >/dev/null; then
+if [[ "${IBO_SKIP_OPTIONAL:-}" == "1" ]]; then
+  : # tests: skip interactive optional installs
+elif ! command -v claude >/dev/null; then
   say "Claude Code is not installed. It runs code tasks in git projects."
   read -r -p "Install Claude Code now? [Y/n] " yn </dev/tty || yn="y"
   [[ "${yn:-y}" =~ ^[Nn] ]] || npm install -g @anthropic-ai/claude-code
 fi
 
-if ! command -v ollama >/dev/null; then
+if [[ "${IBO_SKIP_OPTIONAL:-}" != "1" ]] && ! command -v ollama >/dev/null; then
   say "Optional: Ollama runs email triage locally for free (email stays on your Mac)."
   echo "  brew install ollama && ollama serve"
 fi

@@ -61,7 +61,7 @@ function toolRiskFor(ev: Evidence, server: string, tool: string): RiskLevel {
   return suggestRisk(tool, t?.annotations ?? {});
 }
 
-async function reviewCandidate(c: Candidate): Promise<Project | null> {
+async function reviewCandidate(c: Candidate, assumeYes: boolean): Promise<Project | null> {
   const p = c.project;
   console.log(`\n${pc.bold(p.name ?? p.id)}  ${pc.dim(`[${p.status}${p.lastActivity ? `, last activity ${p.lastActivity.slice(0, 10)}` : ""}]`)}`);
   for (const e of c.evidence) console.log(pc.dim(`  - ${e}`));
@@ -71,6 +71,11 @@ async function reviewCandidate(c: Candidate): Promise<Project | null> {
   if (steps.length) console.log(`  Actions: ${steps.join(", ")}`);
   if (p.match.domains.length || p.match.senders.length) {
     console.log(`  Email: ${[...p.match.senders, ...p.match.domains.map((d) => `@${d}`)].join(", ")}`);
+  }
+
+  if (assumeYes) {
+    console.log(pc.dim("  Added as proposed (--yes)."));
+    return p;
   }
 
   if (c.question) {
@@ -86,17 +91,16 @@ async function reviewCandidate(c: Candidate): Promise<Project | null> {
   }
 
   const noEmail = p.match.domains.length === 0 && p.match.senders.length === 0;
+  const asProposed = {
+    name: `Add as proposed${noEmail ? "" : RECOMMENDED}`,
+    value: "add",
+    description: noEmail ? "No email address is linked yet, so mail will not route here." : "Uses the email matching and actions above.",
+  };
+  const withEmail = { name: `Add and set which emails belong to it${noEmail ? RECOMMENDED : ""}`, value: "edit" };
+  // The recommended option is always listed first.
   const choice = await select({
     message: `Add ${p.name ?? p.id}?`,
-    choices: [
-      {
-        name: `Add as proposed${noEmail ? "" : RECOMMENDED}`,
-        value: "add",
-        description: noEmail ? "No email address is linked yet, so mail will not route here." : "Uses the email matching and actions above.",
-      },
-      { name: `Add and set which emails belong to it${noEmail ? RECOMMENDED : ""}`, value: "edit" },
-      { name: "Skip", value: "skip" },
-    ],
+    choices: [...(noEmail ? [withEmail, asProposed] : [asProposed, withEmail]), { name: "Skip", value: "skip" }],
   });
   if (choice === "skip") return null;
   if (choice === "edit") {
@@ -110,7 +114,8 @@ async function reviewCandidate(c: Candidate): Promise<Project | null> {
 }
 
 /** Interactive onboarding: discover, propose, ask, write config. */
-export async function onboard(models: ModelRouter | null): Promise<void> {
+export async function onboard(models: ModelRouter | null, opts: { assumeYes?: boolean } = {}): Promise<void> {
+  const assumeYes = !!opts.assumeYes;
   ensureHome();
   const log = (s: string) => console.log(s);
   const { evidence, hub } = await gatherEvidence(log);
@@ -137,7 +142,7 @@ export async function onboard(models: ModelRouter | null): Promise<void> {
   const existing = loadProjects();
   const accepted: Project[] = [];
   for (const c of active) {
-    const p = await reviewCandidate(c);
+    const p = await reviewCandidate(c, assumeYes);
     if (!p) continue;
     if (c.summary) {
       const rel = join("projects", `${p.id}.md`);
@@ -147,7 +152,7 @@ export async function onboard(models: ModelRouter | null): Promise<void> {
     accepted.push(p);
   }
 
-  if (dead.length > 0) {
+  if (dead.length > 0 && !assumeYes) {
     const revive = await checkbox({
       message: "Inactive projects (no activity in 180 days). Add any of them anyway?",
       choices: dead.map((c) => ({ name: `${c.project.name ?? c.project.id} (${c.project.lastActivity?.slice(0, 10) ?? "no date"})`, value: c.project.id })),
@@ -164,6 +169,11 @@ export async function onboard(models: ModelRouter | null): Promise<void> {
   for (const [key, { server, tool }] of used) {
     if (tools.tools[key] !== undefined) continue;
     const suggested = toolRiskFor(evidence, server, tool);
+    if (assumeYes) {
+      tools.tools[key] = suggested;
+      log(`  ${key}: level ${suggested} (${RISK_LABELS[suggested]})`);
+      continue;
+    }
     const levels = ([0, 1, 2, 3] as RiskLevel[]).sort((a, b) => (a === suggested ? -1 : b === suggested ? 1 : a - b));
     tools.tools[key] = await select({
       message: `${key}`,

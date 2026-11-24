@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ModelRouter } from "../src/models/router.js";
-import type { Provider, StructuredRequest } from "../src/models/providers.js";
-import { processEmail, type PipelineDeps } from "../src/pipeline/index.js";
-import { Store } from "../src/store/db.js";
-import { email, project, settings } from "./helpers.js";
+import { ModelRouter } from "../../src/models/router.js";
+import type { Provider, StructuredRequest } from "../../src/models/providers.js";
+import { processEmail, type PipelineDeps } from "../../src/pipeline/index.js";
+import { Store } from "../../src/store/db.js";
+import { email, project, settings } from "../helpers.js";
 
 /** Fake provider: triage says "action", planner returns a fixed plan. */
 function fakeModels(plan: unknown, triage = { hasAction: true, intents: ["bug_report"], confidence: 0.95 }): ModelRouter {

@@ -8,23 +8,36 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --mac dmg"
+    "dist": "electron-builder --mac dmg",
+    "test": "playwright test"
   },
   "dependencies": {
     "menubar": "^9.5.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "electron": "^45.4.1",
     "electron-builder": "^26.18.0"
   },
   "build": {
     "appId": "dev.omermichaeli.inbox-orchestrator.menubar",
     "productName": "Inbox Orchestrator",
-    "files": ["main.js", "preload.js", "index.html", "renderer.js", "styles.css", "assets/**"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "styles.css",
+      "assets/**"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg"],
-      "extendInfo": { "LSUIElement": true }
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "LSUIElement": true
+      }
     }
   }
 }

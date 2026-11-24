@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { routeEmail } from "../src/pipeline/router.js";
-import { email, project } from "./helpers.js";
+import { routeEmail } from "../../src/pipeline/router.js";
+import { email, project } from "../helpers.js";
 
 const projects = [
   project({ id: "coleven", match: { senders: ["jack@coleven.com"], domains: ["coleven.com"], keywords: ["hawk graph"] } }),

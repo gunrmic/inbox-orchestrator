@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanClaudeSessions, serverFromToolName } from "../src/discovery/claude-sessions.js";
-import { discoverMcpServers } from "../src/discovery/mcp-configs.js";
-import { newest, statusFrom } from "../src/discovery/activity.js";
-import { proposeDeterministic } from "../src/discovery/propose.js";
+import { scanClaudeSessions, serverFromToolName } from "../../src/discovery/claude-sessions.js";
+import { discoverMcpServers } from "../../src/discovery/mcp-configs.js";
+import { newest, statusFrom } from "../../src/discovery/activity.js";
+import { proposeDeterministic } from "../../src/discovery/propose.js";
 
 const day = 86_400_000;
 
