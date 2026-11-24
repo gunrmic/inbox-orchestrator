@@ -61,6 +61,16 @@ jobs:
           # Fail the release if the app inside the .dmg does not pass a signature check.
           hdiutil attach -nobrowse -mountpoint /tmp/ibo-dmg ../build/dist/Inbox-Orchestrator.dmg
           codesign --verify --deep --strict --verbose=2 "/tmp/ibo-dmg/Inbox Orchestrator.app"
+          # Smoke test: the daemon inside the app starts on the app's own Node and answers.
+          APP="/tmp/ibo-dmg/Inbox Orchestrator.app"
+          export SMOKE_HOME="$(mktemp -d)"
+          ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/Inbox Orchestrator" "$APP/Contents/Resources/cli/dist/cli.js" --version
+          (cd "$SMOKE_HOME" && HOME="$SMOKE_HOME" IBO_HOME="$SMOKE_HOME/.ibo" IBO_SECRETS_BACKEND=file IBO_NO_AUTO_UPDATE=1 ELECTRON_RUN_AS_NODE=1 \
+            "$APP/Contents/MacOS/Inbox Orchestrator" "$APP/Contents/Resources/cli/dist/cli.js" start > "$SMOKE_HOME/daemon.log" 2>&1 &)
+          for i in $(seq 1 30); do [ -f "$SMOKE_HOME/.ibo/api-token" ] && curl -sf -H "authorization: Bearer $(cat "$SMOKE_HOME/.ibo/api-token")" http://127.0.0.1:47811/setup/status && break; sleep 1; done
+          echo; cat "$SMOKE_HOME/daemon.log"
+          curl -sf -H "authorization: Bearer $(cat "$SMOKE_HOME/.ibo/api-token")" http://127.0.0.1:47811/status
+          pkill -f "Contents/Resources/cli/dist/cli.js start" || true
           hdiutil detach /tmp/ibo-dmg
       - uses: actions/upload-artifact@v4
         with:
