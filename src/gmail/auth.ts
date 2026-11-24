@@ -50,7 +50,7 @@ async function loadClient(redirectUri?: string): Promise<OAuth2Client> {
 }
 
 /** Loopback OAuth flow: opens the browser, catches the redirect on 127.0.0.1, stores the refresh token. */
-export async function authorizeInteractive(): Promise<void> {
+export async function authorizeInteractive(opts: { onUrl?: (url: string) => void } = {}): Promise<void> {
   const server = createServer();
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
@@ -76,7 +76,8 @@ export async function authorizeInteractive(): Promise<void> {
       clearTimeout(timer);
       c ? resolve(c) : reject(new Error(u.searchParams.get("error") ?? "No code returned."));
     });
-    console.log(`\nOpen this URL to connect Gmail (read-only):\n${url}\n`);
+    if (opts.onUrl) opts.onUrl(url);
+    else console.log(`\nOpen this URL to connect Gmail (read-only):\n${url}\n`);
     if (platform() === "darwin") execFile("open", [url]);
   });
   server.close();

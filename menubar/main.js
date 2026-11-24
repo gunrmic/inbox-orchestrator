@@ -1,6 +1,6 @@
 // Menu bar companion. Talks only to the local daemon on 127.0.0.1 with the token in
 // ~/.inbox-orchestrator/api-token. Holds no credentials of its own.
-const { app, ipcMain, Notification, shell, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, Notification, shell, nativeImage } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const { menubar } = require("menubar");
 const fs = require("node:fs");
@@ -113,25 +113,44 @@ async function ensureDaemon() {
   daemon.on("exit", () => (daemon = null));
 }
 
-/** First launch: setup asks questions, so it runs in a Terminal window. */
-function openSetupInTerminal() {
-  const q = (s) => `'${s.replace(/'/g, "'\\''")}'`;
-  const cmd = `ELECTRON_RUN_AS_NODE=1 ${q(process.execPath)} ${q(CLI)} setup`;
-  execFile("osascript", ["-e", `tell application "Terminal" to do script ${JSON.stringify(cmd)}`, "-e", 'tell application "Terminal" to activate']);
+// ---- First run: a setup window in the app itself. No Terminal.
+let setupWin = null;
+
+function openSetup() {
+  if (setupWin) return setupWin.focus();
+  setupWin = new BrowserWindow({
+    width: 760,
+    height: 640,
+    title: "Set up Inbox Orchestrator",
+    show: true,
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
+  });
+  setupWin.loadFile(path.join(__dirname, "setup.html"));
+  setupWin.on("closed", () => (setupWin = null));
 }
 
-function needsSetup() {
-  return !fs.existsSync(path.join(HOME, "projects.yaml"));
+/** Setup is needed until the user finished the window, unless projects were mapped from the terminal. */
+async function checkSetup() {
+  try {
+    const s = await call("/setup/status");
+    if (!s.done && s.projects === 0) openSetup();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 mb.on("ready", async () => {
   mb.tray.setTitle(" …");
   if (CLI) {
     app.setLoginItemSettings({ openAtLogin: true });
-    if (needsSetup()) openSetupInTerminal();
     await ensureDaemon();
     setInterval(ensureDaemon, 60_000);
   }
+  // The daemon needs a moment after starting; keep trying in the background until it answers.
+  void (async () => {
+    for (let i = 0; i < 30 && !(await checkSetup()); i++) await new Promise((r) => setTimeout(r, 1000));
+  })();
   refreshBadge();
   setInterval(refreshBadge, 10_000);
 });
@@ -139,9 +158,12 @@ mb.on("ready", async () => {
 app.on("before-quit", () => daemon?.kill("SIGTERM"));
 
 ipcMain.handle("ibo:call", (_e, route, method, body) => call(route, method, body));
+// Only links the app itself shows: Gmail threads, Google sign-in, and two download pages.
+const ALLOWED = ["https://mail.google.com/", "https://accounts.google.com/", "https://ollama.com/", "https://docs.claude.com/"];
 ipcMain.handle("ibo:open", (_e, url) => {
-  if (typeof url === "string" && url.startsWith("https://mail.google.com/")) shell.openExternal(url);
+  if (typeof url === "string" && ALLOWED.some((p) => url.startsWith(p))) shell.openExternal(url);
 });
+ipcMain.handle("ibo:closeSetup", () => setupWin?.close());
 ipcMain.handle("ibo:refresh", () => refreshBadge());
 
 app.on("window-all-closed", (e) => e.preventDefault());

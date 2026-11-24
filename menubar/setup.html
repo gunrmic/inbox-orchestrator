@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+    <link rel="stylesheet" href="setup.css" />
+    <title>Set up Inbox Orchestrator</title>
+  </head>
+  <body>
+    <ol id="steps">
+      <li data-step="google">Google</li>
+      <li data-step="claude">Claude</li>
+      <li data-step="model">Local model</li>
+      <li data-step="projects">Projects</li>
+      <li data-step="done">Done</li>
+    </ol>
+
+    <section id="google" class="step">
+      <h1>Turn email into prepared work</h1>
+      <p>Inbox Orchestrator reads your new mail, works out which project it is about, and prepares the work: a task, a reminder, a fix on a new branch. Anything that others will see waits for your OK.</p>
+      <p class="muted">Read-only access to Gmail and Calendar. Mail is read on this Mac and never stored on any server of ours.</p>
+      <button id="google-btn" class="primary">Sign in with Google</button>
+      <p id="google-wait" class="muted" hidden>Waiting for you in the browser… <a href="#" id="google-link">Open it again</a></p>
+      <p id="google-error" class="error" hidden></p>
+    </section>
+
+    <section id="claude" class="step" hidden>
+      <h1>Claude plans the work</h1>
+      <p id="claude-ok" class="ok" hidden></p>
+      <div id="claude-missing" hidden>
+        <p>Install Claude Code and sign in with your Claude plan. No API key needed.</p>
+        <div class="row">
+          <button id="claude-install" class="primary">Get Claude Code</button>
+          <button id="claude-check">I installed it, check again</button>
+        </div>
+        <details>
+          <summary>Use an Anthropic API key instead</summary>
+          <div class="row"><input id="claude-key" type="password" placeholder="sk-ant-…" /><button id="claude-key-save">Save key</button></div>
+        </details>
+      </div>
+      <p id="claude-error" class="error" hidden></p>
+      <div class="nav"><button id="claude-next" class="primary">Continue</button></div>
+    </section>
+
+    <section id="model" class="step" hidden>
+      <h1>Sort email on this Mac, for free</h1>
+      <p>A small local model decides which emails need action. Mail that needs nothing never leaves your Mac.</p>
+      <p id="model-ok" class="ok" hidden></p>
+      <p id="model-blocked" class="muted" hidden>Local models are off by your organization's policy. Claude does this step instead.</p>
+      <div id="model-actions" hidden>
+        <button id="model-install" class="primary"></button>
+        <button id="model-skip">Skip for now</button>
+      </div>
+      <div id="model-progress" hidden>
+        <p id="model-step"></p>
+        <progress id="model-bar" max="1" value="0"></progress>
+      </div>
+      <p id="model-error" class="error" hidden></p>
+      <div class="nav"><button id="model-next" class="primary" hidden>Continue</button></div>
+    </section>
+
+    <section id="projects" class="step" hidden>
+      <h1>Your projects</h1>
+      <div id="exports" hidden>
+        <p>Found an export from Claude or ChatGPT in Downloads. Project names and chat titles help find projects that have no code on this Mac.</p>
+        <div id="export-list"></div>
+      </div>
+      <div id="scan">
+        <p>Looking at your code folders, Claude Code, Codex and editor history, who you email and meet with.</p>
+        <button id="scan-btn" class="primary">Find my projects</button>
+        <pre id="scan-log" hidden></pre>
+      </div>
+      <p id="scan-error" class="error" hidden></p>
+      <div id="found" hidden>
+        <p class="muted">Checked projects are added. Mail from the listed domains goes to that project. You can change everything later.</p>
+        <div id="cards"></div>
+        <details id="older" hidden><summary>Inactive for 6 months or more</summary><div id="older-cards"></div></details>
+        <div id="manual"></div>
+        <button id="manual-add">Add a project I missed</button>
+        <div class="nav"><button id="projects-save" class="primary">Save projects</button></div>
+      </div>
+    </section>
+
+    <section id="done" class="step" hidden>
+      <h1>All set</h1>
+      <p id="done-summary"></p>
+      <p>Inbox Orchestrator now lives in your menu bar and starts with your Mac. New mail from your projects turns into cards there, and into notifications you can approve right away.</p>
+      <button id="finish" class="primary">Finish</button>
+    </section>
+
+    <template id="card">
+      <article class="card">
+        <label class="head"><input type="checkbox" class="pick" /> <strong class="name"></strong> <span class="badge"></span></label>
+        <ul class="evidence"></ul>
+        <p class="actions muted"></p>
+        <label class="field">Email domains <input class="domains" placeholder="client.com" /></label>
+      </article>
+    </template>
+    <template id="manual-row">
+      <div class="card manual-row">
+        <label class="field">Name <input class="m-name" placeholder="ColEven" /></label>
+        <label class="field">Email domains <input class="m-domains" placeholder="coleven.com" /></label>
+      </div>
+    </template>
+    <script src="setup.js"></script>
+  </body>
+</html>

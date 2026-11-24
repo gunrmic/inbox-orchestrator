@@ -143,15 +143,30 @@ export class OllamaProvider implements Provider {
     return names.includes(name) || names.includes(`${name}:latest`);
   }
 
-  /** Downloads a model. Can take minutes; Ollama answers when it is done. */
-  async pull(name: string): Promise<void> {
+  /** Downloads a model. Can take minutes. `onProgress` gets 0..1 while layers download. */
+  async pull(name: string, onProgress?: (fraction: number, status: string) => void): Promise<void> {
     const res = await this.fetchImpl(`${this.baseUrl}/api/pull`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: name, stream: false }),
+      body: JSON.stringify({ model: name, stream: !!onProgress }),
       signal: AbortSignal.timeout(60 * 60_000),
     });
     if (!res.ok) throw new Error(`Ollama could not pull ${name}: ${res.status}`);
+    if (!onProgress || !res.body) return;
+    const decoder = new TextDecoder();
+    let buf = "";
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      buf += decoder.decode(chunk, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        const e = JSON.parse(line) as { status?: string; total?: number; completed?: number; error?: string };
+        if (e.error) throw new Error(e.error);
+        onProgress(e.total ? (e.completed ?? 0) / e.total : 0, e.status ?? "");
+      }
+    }
   }
 
   async structured(model: string, req: StructuredRequest): Promise<unknown> {

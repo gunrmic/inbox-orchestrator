@@ -28,7 +28,10 @@
       "index.html",
       "renderer.js",
       "styles.css",
-      "assets/**"
+      "assets/**",
+      "setup.html",
+      "setup.js",
+      "setup.css"
     ],
     "mac": {
       "category": "public.app-category.productivity",

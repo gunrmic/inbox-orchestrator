@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -192,4 +192,68 @@ test("an unknown sender asks which project it belongs to, then gets that project
   await expect(page.locator("#banner")).toContainText("now goes to hawk");
   await expect(page.locator(".card .summary")).toHaveText("Open a ticket for the date filter bug", { timeout: 20_000 });
   expect(readFileSync(join(ws.iboHome, "projects.yaml"), "utf8")).toContain("acme.io");
+});
+
+test("first run: the setup window walks through Claude, the model and projects, with no Terminal", async () => {
+  const port = await freePort();
+  const ws = workspace(port);
+  // Fresh install: no projects yet. Google is already connected (a sign-in cannot run in CI),
+  // and Claude Code once worked in a git repo, which discovery should find.
+  writeFileSync(join(ws.iboHome, "projects.yaml"), "projects: []\n");
+  mkdirSync(join(ws.iboHome, "secrets"), { recursive: true });
+  writeFileSync(join(ws.iboHome, "secrets", "google-refresh-token"), "rt");
+  const repo = join(ws.home, "code", "hawk");
+  mkdirSync(repo, { recursive: true });
+  execFileSync("git", ["-C", repo, "init", "-q", "-b", "main"]);
+  execFileSync("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"]);
+  const sessions = join(ws.home, ".claude", "projects", "-code-hawk");
+  mkdirSync(sessions, { recursive: true });
+  writeFileSync(join(sessions, "s.jsonl"), JSON.stringify({ cwd: repo, timestamp: new Date().toISOString(), message: { content: [] } }));
+
+  const api = await fakeAnthropic();
+  closeApi = api.close;
+  const env = {
+    HOME: ws.home,
+    IBO_HOME: ws.iboHome,
+    IBO_SECRETS_BACKEND: "file",
+    IBO_CLAUDE_BIN: join(ws.home, "no-claude"),
+    IBO_NO_AUTO_UPDATE: "1",
+    IBO_SCAN_ROOTS: join(ws.home, "none"),
+    IBO_TEST_INBOX: ws.inbox,
+    IBO_BLOCK_LOCAL_MODELS: "1",
+    ANTHROPIC_API_KEY: "test",
+    ANTHROPIC_BASE_URL: api.url,
+  };
+  daemon = spawn(process.execPath, [CLI, "start"], { env: { ...process.env, ...env } });
+  let out = "";
+  daemon.stdout!.on("data", (d) => (out += d));
+  await expect.poll(() => out, { timeout: 20_000 }).toContain("API on");
+
+  app = await electron.launch({ args: [MAIN, "--no-sandbox"], env: { ...process.env, ...env } as Record<string, string> });
+  const setup = await app.waitForEvent("window", { predicate: (p) => p.url().endsWith("setup.html"), timeout: 30_000 });
+
+  // Google is connected, so it starts at Claude, which uses the API key here.
+  await expect(setup.locator("#claude-ok")).toHaveText("✓ Using your Anthropic API key");
+  await setup.locator("#claude-next").click();
+  // The organization blocks local models: the step says so and lets you continue.
+  await expect(setup.locator("#model-blocked")).toBeVisible();
+  await setup.locator("#model-next").click();
+
+  await setup.locator("#scan-btn").click();
+  const hawk = setup.locator('.card[data-id="hawk"]');
+  await expect(hawk).toBeVisible({ timeout: 30_000 });
+  await expect(hawk.locator(".pick")).toBeChecked();
+  await hawk.locator(".domains").fill("coleven.com");
+  await setup.locator("#manual-add").click();
+  await setup.locator(".m-name").fill("Shamir");
+  await setup.locator(".m-domains").fill("shamir.org.il");
+  await setup.locator("#projects-save").click();
+
+  await expect(setup.locator("#done-summary")).toHaveText("2 projects mapped.");
+  const closed = setup.waitForEvent("close");
+  await setup.locator("#finish").click();
+  await closed;
+  const yaml = readFileSync(join(ws.iboHome, "projects.yaml"), "utf8");
+  expect(yaml).toContain("coleven.com");
+  expect(yaml).toContain("shamir.org.il");
 });

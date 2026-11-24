@@ -100,6 +100,8 @@ export async function gatherEvidence(log: (s: string) => void, imports: string[]
   let meetings: Evidence["meetings"] = [];
   let auth: Awaited<ReturnType<typeof authorizedClient>> | null = null;
   try {
+    // A test inbox stands in for Gmail, so there is no mail or calendar to read.
+    if (process.env.IBO_TEST_INBOX) throw new Error("test inbox in use");
     auth = await authorizedClient();
   } catch (err) {
     log(pc.yellow(`Email and calendar skipped: ${err instanceof Error ? err.message : err}`));
@@ -236,6 +238,56 @@ async function askManualProject(ev: Evidence): Promise<Project> {
   };
 }
 
+/** Model proposal when a model is available, folder- and name-based otherwise. Split into active and dead. */
+export async function proposeCandidates(
+  models: ModelRouter | null,
+  evidence: Evidence,
+  log: (s: string) => void,
+): Promise<{ active: Candidate[]; dead: Candidate[] }> {
+  let candidates: Candidate[];
+  if (models) {
+    log("Asking the model to connect the evidence into projects...");
+    try {
+      candidates = await proposeWithModel(models, evidence);
+    } catch (err) {
+      log(pc.yellow(`Model proposal failed (${err instanceof Error ? err.message : err}); using folder-based proposal.`));
+      candidates = proposeDeterministic(evidence);
+    }
+  } else {
+    candidates = proposeDeterministic(evidence);
+  }
+  const dead = candidates.filter((c) => c.project.status === "dead");
+  const active = candidates
+    .filter((c) => c.project.status !== "dead")
+    .sort((a, b) => (a.project.status === b.project.status ? b.confidence - a.confidence : a.project.status === "live" ? -1 : 1));
+  return { active, dead };
+}
+
+/** Writes the architecture summary next to the config and points the project at it. */
+export function writeSummary(p: Project, summary: string | undefined): void {
+  if (!summary) return;
+  const rel = join("projects", `${p.id}.md`);
+  writeFileSync(join(paths.home, rel), `# ${p.name ?? p.id}\n\n${summary}\n`, { mode: 0o600 });
+  p.summary = rel;
+}
+
+/** Suggested risk level for every MCP tool these projects use and that has no confirmed level yet. */
+export function suggestedToolLevels(projects: Project[], evidence: Evidence): Record<string, RiskLevel> {
+  const out: Record<string, RiskLevel> = {};
+  for (const p of projects)
+    for (const s of Object.values(p.playbook)) if (s.kind === "mcp") out[`${s.server}/${s.tool}`] = toolRiskFor(evidence, s.server, s.tool);
+  return out;
+}
+
+/** Merges accepted projects into projects.yaml (same id wins) and saves tool levels. */
+export function saveAccepted(accepted: Project[], tools: ReturnType<typeof loadTools>): void {
+  const existing = loadProjects();
+  const merged = new Map(existing.projects.map((p) => [p.id, p]));
+  for (const p of accepted) merged.set(p.id, p);
+  saveProjects({ projects: [...merged.values()] });
+  saveTools(tools);
+}
+
 /** Interactive onboarding: discover, propose, ask, write config. */
 export async function onboard(models: ModelRouter | null, opts: { assumeYes?: boolean; imports?: string[] } = {}): Promise<void> {
   const assumeYes = !!opts.assumeYes;
@@ -252,35 +304,14 @@ export async function onboard(models: ModelRouter | null, opts: { assumeYes?: bo
   }
   const { evidence, hub } = await gatherEvidence(log, imports);
 
-  let candidates: Candidate[];
-  if (models) {
-    log("\nAsking the model to connect the evidence into projects...");
-    try {
-      candidates = await proposeWithModel(models, evidence);
-    } catch (err) {
-      log(pc.yellow(`Model proposal failed (${err instanceof Error ? err.message : err}); using folder-based proposal.`));
-      candidates = proposeDeterministic(evidence);
-    }
-  } else {
-    candidates = proposeDeterministic(evidence);
-  }
-
-  const dead = candidates.filter((c) => c.project.status === "dead");
-  const active = candidates
-    .filter((c) => c.project.status !== "dead")
-    .sort((a, b) => (a.project.status === b.project.status ? b.confidence - a.confidence : a.project.status === "live" ? -1 : 1));
+  const { active, dead } = await proposeCandidates(models, evidence, log);
   log(`\nFound ${active.length} live or dormant projects. ${dead.length} with no activity in 180 days were left out.`);
 
-  const existing = loadProjects();
   const accepted: Project[] = [];
   for (const c of active) {
     const p = await reviewCandidate(c, assumeYes);
     if (!p) continue;
-    if (c.summary) {
-      const rel = join("projects", `${p.id}.md`);
-      writeFileSync(join(paths.home, rel), `# ${p.name ?? p.id}\n\n${c.summary}\n`, { mode: 0o600 });
-      p.summary = rel;
-    }
+    writeSummary(p, c.summary);
     accepted.push(p);
   }
 
@@ -319,10 +350,7 @@ export async function onboard(models: ModelRouter | null, opts: { assumeYes?: bo
     });
   }
 
-  const merged = new Map(existing.projects.map((p) => [p.id, p]));
-  for (const p of accepted) merged.set(p.id, p);
-  saveProjects({ projects: [...merged.values()] });
-  saveTools(tools);
+  saveAccepted(accepted, tools);
   await hub.closeAll();
 
   log(`\n${pc.green("Saved")} ${accepted.length} projects to ${paths.projects}`);

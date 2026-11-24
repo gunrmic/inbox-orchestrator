@@ -1,0 +1,26 @@
+:root { color-scheme: light dark; font: 14px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+body { margin: 0; padding: 24px 32px; }
+#steps { display: flex; gap: 18px; list-style: none; padding: 0; margin: 0 0 24px; font-size: 12px; opacity: .55; }
+#steps li.active { opacity: 1; font-weight: 600; }
+#steps li.complete::before { content: "✓ "; color: #27ae60; }
+h1 { font-size: 22px; margin: 0 0 12px; }
+p { line-height: 1.5; max-width: 600px; }
+.muted { opacity: .65; font-size: 13px; }
+.ok { color: #27ae60; font-weight: 600; }
+.error { color: #c0392b; }
+button { font: inherit; padding: 7px 14px; border-radius: 7px; border: 1px solid rgba(127,127,127,.4); background: transparent; cursor: pointer; }
+button.primary { background: #2f6fed; color: white; border-color: #2f6fed; }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.nav { margin-top: 20px; }
+input[type=password], input:not([type]) { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(127,127,127,.4); background: transparent; min-width: 260px; }
+progress { width: 100%; max-width: 520px; height: 10px; }
+pre { font: 11px ui-monospace, Menlo, monospace; opacity: .7; white-space: pre-wrap; max-height: 160px; overflow-y: auto; }
+.card { border: 1px solid rgba(127,127,127,.3); border-radius: 9px; padding: 10px 12px; margin: 10px 0; max-width: 640px; }
+.card .head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: rgba(127,127,127,.18); }
+.badge[data-status="live"] { background: rgba(39,174,96,.2); }
+.evidence { margin: 6px 0; padding-left: 18px; font-size: 12px; opacity: .75; }
+.actions { margin: 4px 0; }
+.field { display: flex; gap: 8px; align-items: center; font-size: 12px; margin-top: 6px; }
+.field input { flex: 1; }

@@ -87,10 +87,23 @@ export async function startDaemon(): Promise<void> {
   await api.listen({ host: "127.0.0.1", port });
   log(`API on http://127.0.0.1:${port} (token in ~/.inbox-orchestrator/api-token)`);
 
-  const source = await emailSource();
-  log(
-    `Watching ${process.env.IBO_TEST_INBOX ? "test inbox" : "Gmail"}. ${rt.projects().length} projects mapped. Mode: ${rt.settings().mode}${rt.settings().killSwitch ? pc.red(" KILL SWITCH ON") : ""}`,
-  );
+  // Before setup there is no Gmail yet: the API still runs (the setup window needs it)
+  // and polling starts as soon as the sign-in is done.
+  let source: EmailSource | null = null;
+  let waitingLogged = false;
+  const connect = async () => {
+    if (source) return source;
+    try {
+      source = await emailSource();
+      log(
+        `Watching ${process.env.IBO_TEST_INBOX ? "test inbox" : "Gmail"}. ${rt.projects().length} projects mapped. Mode: ${rt.settings().mode}${rt.settings().killSwitch ? pc.red(" KILL SWITCH ON") : ""}`,
+      );
+    } catch (err) {
+      if (!waitingLogged) log(`Waiting for setup: ${err instanceof Error ? err.message : err}`);
+      waitingLogged = true;
+    }
+    return source;
+  };
 
   let stopping = false;
   const shutdown = async () => {
@@ -114,11 +127,12 @@ export async function startDaemon(): Promise<void> {
 
   while (!stopping) {
     try {
-      await pollOnce(rt, source);
+      const src = await connect();
+      if (src) await pollOnce(rt, src);
     } catch (err) {
       log(pc.yellow(`poll failed: ${err instanceof Error ? err.message : err}`));
     }
     await maintenance(rt, log).catch((err) => log(pc.yellow(`maintenance failed: ${err instanceof Error ? err.message : err}`)));
-    await new Promise((r) => setTimeout(r, rt.settings().gmail.pollSeconds * 1000));
+    await new Promise((r) => setTimeout(r, source ? rt.settings().gmail.pollSeconds * 1000 : 3000));
   }
 }

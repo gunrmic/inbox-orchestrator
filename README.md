@@ -69,7 +69,7 @@ npm link           # makes `ibo` available
 
 ### Menu bar app (.dmg, no terminal)
 
-Download the `.dmg` from [Releases](https://github.com/gunrmic/inbox-orchestrator/releases). The daemon and CLI ship inside the app and run on its built-in Node, so you do not need Node, git or a terminal. On first launch it opens setup in a Terminal window, starts at login, and runs the daemon itself.
+Download the `.dmg` from [Releases](https://github.com/gunrmic/inbox-orchestrator/releases). The daemon and CLI ship inside the app and run on its built-in Node, so you do not need Node, git or a terminal. On first launch a setup window walks you through it, no terminal: sign in with Google, Claude (your Claude Code login is picked up automatically), a one-click local model download with a progress bar, and your projects as cards you check or uncheck, with the email domains for each. After that the app lives in the menu bar, starts at login, and runs the daemon itself.
 
 Notifications come with **Do it** and **Dismiss** buttons for levels 0 to 2, so most cards never need the window. Level 3 and "which project?" questions open it.
 

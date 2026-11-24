@@ -7,6 +7,7 @@ import { shouldOfferPromotion } from "../policy/engine.js";
 import { processEmail, runAction } from "../pipeline/index.js";
 import { applyAssignment, type AssignInfo } from "../pipeline/assign.js";
 import { listSuggestions, resolveSuggestion } from "../discovery/rediscover.js";
+import { registerSetupApi } from "./setup-api.js";
 import type { Runtime } from "../runtime.js";
 
 /** Token the menu bar app uses. Created once, readable only by the user. */
@@ -139,6 +140,8 @@ export function buildApi(rt: Runtime): FastifyInstance {
   });
 
   app.get("/audit", async () => rt.store.recentAudit(100));
+
+  registerSetupApi(app, rt);
 
   return app;
 }
