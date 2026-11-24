@@ -3,6 +3,7 @@
 const { app, BrowserWindow, dialog, ipcMain, Notification, shell, nativeImage } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const { menubar } = require("menubar");
+const { autoUpdater } = require("electron-updater");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -208,6 +209,23 @@ async function checkSetup() {
   }
 }
 
+// ---- Updates: the signed app checks GitHub Releases, downloads in the background and
+// offers "Restart to update" in the window. The agent inside the app updates with it.
+let updateReady = null;
+function setupUpdates() {
+  if (!app.isPackaged || process.env.IBO_NO_AUTO_UPDATE === "1") return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on("update-downloaded", (info) => {
+    updateReady = info.version;
+    if (Notification.isSupported()) new Notification({ title: "Inbox Orchestrator", body: `Version ${info.version} is ready. Restart to update.` }).show();
+  });
+  autoUpdater.on("error", () => undefined);
+  const check = () => autoUpdater.checkForUpdates().catch(() => undefined);
+  setTimeout(check, 10_000);
+  setInterval(check, 6 * 60 * 60 * 1000);
+}
+
 /** Running from the .dmg or Downloads breaks updates and login items: offer to move it. */
 async function offerMoveToApplications() {
   if (!app.isPackaged || process.platform !== "darwin" || app.isInApplicationsFolder()) return;
@@ -232,6 +250,7 @@ mb.on("ready", async () => {
   mb.tray.setTitle(" …");
   loadLoginPath();
   await offerMoveToApplications();
+  setupUpdates();
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: prefs().autoStart });
   await new Promise((r) => setTimeout(r, 300));
   await ensureDaemon();
@@ -275,6 +294,11 @@ ipcMain.handle("ibo:autoStart", (_e, on) => {
 ipcMain.handle("ibo:showLog", () => shell.openPath(LOG));
 ipcMain.handle("ibo:openSetup", () => openSetup());
 ipcMain.handle("ibo:quit", () => app.quit());
+ipcMain.handle("ibo:update", () => ({ ready: updateReady, current: app.getVersion() }));
+ipcMain.handle("ibo:installUpdate", () => {
+  stopAgent();
+  autoUpdater.quitAndInstall();
+});
 ipcMain.handle("ibo:refresh", () => refreshBadge());
 
 app.on("window-all-closed", (e) => e.preventDefault());

@@ -12,6 +12,7 @@
     "test": "playwright test"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "menubar": "^9.5.3"
   },
   "devDependencies": {
@@ -41,11 +42,18 @@
           "arch": [
             "universal"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "extendInfo": {
         "LSUIElement": true
-      }
+      },
+      "artifactName": "Inbox-Orchestrator-${version}-mac.${ext}"
     },
     "extraResources": [
       {
@@ -62,7 +70,14 @@
     },
     "directories": {
       "output": "../build/dist"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "gunrmic",
+        "repo": "inbox-orchestrator"
+      }
+    ]
   },
   "author": "Omer Michaeli"
 }

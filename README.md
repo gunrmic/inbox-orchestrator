@@ -73,6 +73,8 @@ npm link           # makes `ibo` available
 
 [Download the .dmg](https://github.com/gunrmic/inbox-orchestrator/releases/latest/download/Inbox-Orchestrator.dmg). The link always points to the latest release. The daemon and CLI ship inside the app and run on its built-in Node, so you do not need Node, git or a terminal. On first launch a setup window walks you through it, no terminal: sign in with Google, Claude (your Claude Code login is picked up automatically), a one-click local model download with a progress bar, and your projects as cards you check or uncheck, with the email domains for each. After that the app lives in the menu bar, starts at login, and runs the daemon itself.
 
+The app updates itself: it checks GitHub Releases every few hours, downloads new versions in the background and shows **Restart to update**. The agent inside updates with it.
+
 Notifications come with **Do it** and **Dismiss** buttons for levels 0 to 2, so most cards never need the window. Level 3 and "which project?" questions open it.
 
 Build it yourself:

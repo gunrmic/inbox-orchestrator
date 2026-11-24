@@ -245,6 +245,8 @@ async function render() {
   else if (status.agent === "waiting-setup") setStatus("warn", "Not connected to Gmail yet · finish setup");
   else setStatus("ok", `Watching Gmail · checked ${ago(status.lastPoll)} · ${projects.length} project${projects.length === 1 ? "" : "s"}`);
   if ($("#stopped").hidden === false) showView(tab);
+  const up = window.ibo.update ? await window.ibo.update() : null;
+  if (up && up.ready && $("#banner").hidden) banner(`Version ${up.ready} is ready.`, [["Restart to update", () => window.ibo.installUpdate()]]);
   await renderSuggestions(status);
   if (tab === "waiting") await renderCards();
   else await renderActivity();

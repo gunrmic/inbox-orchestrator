@@ -70,6 +70,8 @@ jobs:
             npx electron-builder --mac dmg --publish never -c.mac.identity=-
           fi
           # Fail the release if the app inside the .dmg does not pass a signature check.
+          ls -la ../build/dist
+          test -f ../build/dist/latest-mac.yml
           hdiutil attach -nobrowse -mountpoint /tmp/ibo-dmg ../build/dist/Inbox-Orchestrator.dmg
           codesign --verify --deep --strict --verbose=2 "/tmp/ibo-dmg/Inbox Orchestrator.app"
           # Smoke test: the daemon inside the app starts on the app's own Node and answers.
@@ -96,4 +98,5 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           if [ -n "$INPUT_VERSION" ]; then TAG="v${INPUT_VERSION#v}"; fi
-          gh release create "$TAG" build/dist/*.dmg --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          # The .dmg for new users; the zip, blockmaps and latest-mac.yml for the app's own updater.
+          gh release create "$TAG" build/dist/*.dmg build/dist/*.zip build/dist/*.blockmap build/dist/latest-mac.yml --target "$GITHUB_SHA" --title "$TAG" --generate-notes

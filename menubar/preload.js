@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld("ibo", {
   showLog: () => ipcRenderer.invoke("ibo:showLog"),
   openSetup: () => ipcRenderer.invoke("ibo:openSetup"),
   quit: () => ipcRenderer.invoke("ibo:quit"),
+  update: () => ipcRenderer.invoke("ibo:update"),
+  installUpdate: () => ipcRenderer.invoke("ibo:installUpdate"),
 });
