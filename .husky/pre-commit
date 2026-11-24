@@ -1,0 +1,5 @@
+# Runs before every commit. Skip in an emergency with: git commit --no-verify
+echo "pre-commit: typecheck, build, unit + integration + e2e tests"
+npm run typecheck
+npm run build --silent
+npm test

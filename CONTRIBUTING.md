@@ -12,9 +12,11 @@ Issues and pull requests are welcome.
 ## Workflow
 
 ```bash
-npm install
-npm run typecheck
-npm test
+npm ci            # also enables the git hooks
+npm test          # unit + integration + e2e
+npm run test:all  # plus the real installer and the menu bar app
 ```
 
-Add tests for anything that touches `src/policy`, `src/pipeline/router.ts` or `src/models/router.ts`.
+The pre-commit hook runs typecheck and the main suites; the pre-push hook and CI run everything on macOS and Linux. A change is not done until all of them pass.
+
+Every change needs tests at the right layer: unit for logic, integration when it crosses a process or the file system, e2e when it changes what the `ibo` command or the daemon does. Changes to `src/policy`, `src/pipeline/router.ts` or `src/models/router.ts` always need unit tests.

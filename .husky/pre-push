@@ -1,0 +1,15 @@
+# Runs before every push: the full suite, including the real installer and the menu bar app.
+echo "pre-push: full test suite"
+npm run typecheck
+npm run build --silent
+npm run test:coverage
+npm run test:e2e --silent
+npm run test:install
+if [ ! -d menubar/node_modules ]; then
+  npm --prefix menubar ci --no-fund --no-audit
+fi
+if [ "$(uname)" = "Linux" ] && command -v xvfb-run >/dev/null; then
+  (cd menubar && xvfb-run -a npx playwright test)
+else
+  npm run test:menubar
+fi

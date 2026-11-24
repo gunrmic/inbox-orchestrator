@@ -18,7 +18,7 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: ["src/cli.ts", "src/daemon.ts"], // covered by e2e as child processes
       reporter: ["text-summary", "html", "lcov"],
-      thresholds: { lines: 75, functions: 75, branches: 65, statements: 75 },
+      thresholds: { lines: 85, functions: 85, branches: 70, statements: 85 },
     },
     projects: [
       { extends: true, test: { name: "unit", include: ["test/unit/**/*.test.ts"] } },

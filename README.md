@@ -243,20 +243,45 @@ src/
 menubar/                 Electron menu bar app
 examples/                example config files
 scripts/install.sh       macOS installer
-test/                    vitest suite
+test/                    unit, integration, e2e (Vitest)
+menubar/e2e/             menu bar e2e (Playwright)
 ```
 
 ## Development
 
 ```bash
-npm install
-npm run typecheck
-npm test
+npm ci                     # installs, builds, and enables the git hooks
 npm run dev -- --help      # run the CLI from source with tsx
 IBO_HOME=/tmp/ibo npm run dev -- simulate --from a@b.com --subject x --body y --dry
 ```
 
-The tests cover the policy engine, risk classification, routing, model fallback, discovery parsers, Gmail parsing and the full pipeline with fake models.
+## Testing
+
+Four layers, all with throwaway state folders and the file secrets backend, so no test touches your real config, Keychain, Gmail or Anthropic account.
+
+| Suite | Command | What it covers | Tools |
+| --- | --- | --- | --- |
+| Unit | `npm run test:unit` | Policy engine, risk levels, routing, model fallback, prompts, config, secrets, Gmail parsing and polling, discovery, executors, launchd | Vitest |
+| Integration | `npm run test:integration` | A real MCP server over stdio, Claude Code on a real git repo (with a fake `claude`), the HTTP API, the daemon cycle, onboarding with scripted answers | Vitest |
+| End to end | `npm run test:e2e` | The built `ibo` CLI and daemon as real processes against fake Anthropic and Ollama servers: setup, onboarding, simulate, approve, reject, kill switch, promotion | Vitest + child processes |
+| Installer | `npm run test:install` | Runs `scripts/install.sh` for real from a snapshot of the working tree, then the installed `ibo` | Vitest + bash |
+| Menu bar | `npm run test:menubar` | Drives the Electron app against a live daemon: renders cards, edits and approves, kill switch | Playwright |
+
+```bash
+npm test                  # unit + integration + e2e
+npm run test:coverage     # unit + integration with coverage thresholds (85% lines)
+npm run test:all          # everything, including installer and menu bar
+```
+
+On Linux the menu bar tests need a virtual display: `cd menubar && xvfb-run -a npx playwright test`.
+
+### Git hooks and CI
+
+- **pre-commit** (Husky): typecheck, build, unit, integration and e2e tests.
+- **pre-push**: everything, including coverage thresholds, the real installer and the menu bar app.
+- **GitHub Actions**: every push and pull request runs the full suite on macOS and Linux, plus Node 22, 24 and 26.
+
+Use `git commit --no-verify` only in an emergency; CI runs the same checks anyway.
 
 ## Roadmap
 
