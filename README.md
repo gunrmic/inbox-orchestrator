@@ -1,6 +1,7 @@
 # inbox-orchestrator
 
-**[⬇ Download for Mac](https://github.com/gunrmic/inbox-orchestrator/releases/latest/download/Inbox-Orchestrator.dmg)** (Apple Silicon and Intel) · or install from the terminal, see [Install](#install)
+> **Archived, November 2026.** This project is no longer developed or supported. The code stays here as a reference: a signed and notarized macOS menu bar app (Electron) with a local agent that turns incoming email into prepared work through your own MCP tools and Claude Code, with a deterministic risk policy, local-first models, project discovery, and unit, integration and end-to-end tests. The release builds and the Google sign-in no longer work: the signing certificate and the Google OAuth client have been revoked. To run it yourself, bring your own Google OAuth client (`ibo setup gmail --client-json`).
+
 
 A local agent for macOS that sits beside your inbox. It reads each incoming email, works out what work the email asks for, and prepares that work with the tools you already use: your MCP servers, Claude Code, your calendar, your reminders. Things that are safe and reversible happen on their own. Everything else waits for one click in the menu bar.
 
